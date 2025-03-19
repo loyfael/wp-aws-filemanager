@@ -1,0 +1,21 @@
+{
+  "name": "wp-aws-filemanager",
+  "version": "1.0.0",
+  "description": "Small script who's permit to export wp img to aws",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "npx tsc && node dist/index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.758.0",
+    "dotenv": "^16.4.7",
+    "mysql2": "^3.13.0",
+    "path": "^0.12.7",
+    "typescript": "^5.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10"
+  }
+}
