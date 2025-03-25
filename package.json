@@ -1,0 +1,34 @@
+{
+  "name": "wp-aws-filemanager",
+  "version": "1.0.0",
+  "description": "Small script who's permit to export wp img to aws",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "npm run build && node dist/index.js",
+    "list": "npm run build && node dist/index.js list",
+    "migrate": "npm run build && node dist/index.js migrate",
+    "dry-run": "npm run build && node dist/index.js dry-run",
+    "rollback": "npm run build && node dist/index.js rollback",
+    "update-elementor-data": "npm run build && node dist/index.js update-elementor-data"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.772.0",
+    "@aws-sdk/lib-storage": "^3.772.0",
+    "axios": "^1.8.4",
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "dotenv": "^16.4.7",
+    "mysql2": "^3.14.0",
+    "path": "^0.12.7",
+    "php-serialize": "^5.1.3",
+    "phpunserialize": "^1.3.0",
+    "typescript": "^5.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/yargs": "^17.0.33"
+  }
+}

@@ -1,0 +1,3 @@
+- GET l'ensemble des images dans la table M3hSHDUe_posts. Récupérer les post_type attachment ainsi que leurs GUID.
+- POST les images dans AWS et récupérer le lien.
+- 
