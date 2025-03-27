@@ -5,6 +5,7 @@ import { processImages } from '../core/processor'
  */
 export async function dryRunCommand() {
   const batchSize = parseInt(process.env.BATCH_SIZE || '100', 10)
-  console.log('Running in dry-run mode. No AWS upload or DB change will occur.')
+  console.log('Dry-run command started. No AWS upload or DB change will occur.')
+  
   await processImages(batchSize, { dryRun: true })
 }
