@@ -3,165 +3,141 @@ dotenv.config();
 
 import path from 'path';
 import fs from 'fs/promises';
-import { pool } from '../database/mysql';
+import { streamPool } from '../database/mysql-stream';
 import { parseMetadata, serializeMetadata } from '../utils/metadata-parser';
 import { downloadImage } from '../utils/downloader';
 import { uploadToS3 } from '../aws/uploader';
 import { backupMetadata } from '../utils/backup';
+import { processBuffer } from './processBuffer';
 
 /**
- * Options for the processImages function.
+ * Options for the processImages function
  */
-interface ProcessImageOptions {
+export interface ProcessImageOptions {
   dryRun?: boolean;
 }
 
 /**
- * Process images in batch and upload to S3 bucket with metadata update.
- * Can use dry-run mode to skip actual upload and DB change.
- * Also backup the original metadata before update.
+ * Process all images in the database, downloading and uploading them to S3
  * @param batchSize 
  * @param options 
  */
 export async function processImages(batchSize: number, options: ProcessImageOptions = {}) {
+  console.log('🚀 Migration started...');
 
-  // ---------- Main command ----------
-  console.log('🚀 Migration started..');
+  // Query all attachment posts with metadata
+  const query = `
+    SELECT p.ID, m.meta_value
+    FROM M3hSHDUe_posts p
+    JOIN M3hSHDUe_postmeta m ON p.ID = m.post_id
+    WHERE p.post_type = 'attachment' AND m.meta_key = '_wp_attachment_metadata'
+  `;
 
-  // Fetch attachments in batch from the database (only ID is needed)
-  const [attachments]: any[] = await pool.query(
-    `SELECT ID FROM M3hSHDUe_posts WHERE post_type = 'attachment' LIMIT ?`,
-    [batchSize]
-  );
+  // Stream the query results
+  const stream = streamPool.query(query).stream();
 
-  // Process each attachment in the batch sequentially
-  for (const row of attachments) {
+  // Buffer for batch processing of rows. Permit to process multiple rows at once
+  let buffer: any[] = [];
 
-    // Extract post ID
-    const postId = row.ID;
+  // Iterate over the stream and process the rows
+  for await (const row of stream) {
 
-    // Fetch metadata for the post ID from the database (only _wp_attachment_metadata is needed)
-    const [metaRows]: any[] = await pool.query(
-      `SELECT meta_value FROM M3hSHDUe_postmeta WHERE post_id = ? AND meta_key = '_wp_attachment_metadata'`,
-      [postId]
-    );
+    // Push the row to the buffer
+    buffer.push(row);
 
-    // Skip if no metadata found for the post 
-    if (!metaRows.length) continue;
+    // Check if the buffer is full or the dry-run limit is reached
+    const isDryRunLimitReached = options.dryRun && buffer.length >= 500;
+    const isBatchFull = !options.dryRun && buffer.length >= batchSize;
 
-    // Extract raw metadata string from the database
-    const rawMeta = metaRows[0].meta_value;
+    if (isDryRunLimitReached || isBatchFull) {
+      await processBuffer(buffer, options);
+      buffer = [];
 
-    // Parse metadata from the raw string
-    const metadata = parseMetadata(rawMeta);
-
-    // Skip if already migrated (has S3 URL)
-    if (metadata?.s3) {
-      console.log(`Skipping post ${postId}, already migrated.`);
-      continue;
-    }
-
-    // Process the main image and sizes sequentially for the post ID
-    try {
-      // Download the main image file
-      const filePath = metadata.file;
-
-      // Skip if no main image file found in the metadata
-      const localFile = await downloadImage(filePath);
-
-      // Upload the main image file to S3 bucket
-      const mainUrl = options.dryRun
-        ? `DRY_RUN_S3_URL/${filePath}`
-        : await uploadToS3(localFile, filePath);
-
-      // Update the metadata with the S3 URL
-      metadata.s3 = {
-        url: mainUrl,
-        bucket: process.env.AWS_BUCKET_NAME!,
-        key: filePath,
-        provider: 's3',
-        'mime-type': 'image/jpeg',
-        privacy: 'public-read',
-      };
-
-      // Remove the local file after upload
-      if (!options.dryRun) {
-        await fs.unlink(localFile);
-      }
-
-      // Process each size in the metadata sequentially
-      const basePath = path.posix.dirname(filePath);
-
-      // Skip if no sizes found in the metadata
-      if (metadata.sizes && typeof metadata.sizes === 'object') {
-
-        // Process each size sequentially for the post ID
-        for (const sizeName in metadata.sizes) {
-          const size = metadata.sizes[sizeName];
-
-          // Skip if already migrated (has S3 URL)
-          if (size.s3) {
-            console.log(`Skipping size '${sizeName}' for post ${postId} (already migrated).`);
-            continue;
-          }
-
-          // Download the size image file for the post ID
-          try {
-            // Download the size image file for the post ID
-            const sizeKey = `${basePath}/${size.file}`;
-            const sizeTmp = await downloadImage(sizeKey);
-
-            // Upload the size image file to S3 bucket
-            const sizeUrl = options.dryRun
-              ? `DRY_RUN_S3_URL/${sizeKey}`
-              : await uploadToS3(sizeTmp, sizeKey);
-
-            // Update the metadata with the S3 URL
-            size.s3 = {
-              url: sizeUrl,
-              bucket: process.env.AWS_BUCKET_NAME!,
-              key: sizeKey,
-              provider: 's3',
-              'mime-type': size['mime-type'] || 'image/jpeg',
-              privacy: 'public-read',
-            };
-
-            // Remove the local file after upload
-            if (!options.dryRun) {
-              await fs.unlink(sizeTmp);
-            }
-
-          } catch (err) {
-            console.warn(
-              `⚠️ Skipping size '${sizeName}' for post ${postId}: ${(err as Error).message}`
-            );
-          }
-        }
-      }
-
-      // Serialize the updated metadata back to string
-      const newMeta = serializeMetadata(metadata);
-
-      // Update the metadata in the database for the post ID
-      if (!options.dryRun) {
-        // Backup the original metadata before update
-        backupMetadata(postId, rawMeta);
-
-        // Update the metadata in the database
-        await pool.query(
-          `UPDATE M3hSHDUe_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_wp_attachment_metadata'`,
-          [newMeta, postId]
-        );
-
-        console.log(`✅ Migrated post ${postId} (main + sizes)`);
-      } else {
-        console.log(`(Dry-run) Would migrate post ${postId} + sizes`);
-      }
-
-    } catch (err) {
-      console.error(`❌ Failed to migrate post ${postId}: ${(err as Error).message}`);
+      if (options.dryRun) break; // Only one sequence in dry-run mode
     }
   }
 
+  // Process the remaining rows in the buffer
+  if (buffer.length) {
+    await processBuffer(buffer, options);
+  }
+
   console.log(options.dryRun ? 'Dry-run completed.' : 'Migration completed.');
+}
+
+// Process the main image and sizes for a post
+async function processMainImage(postId: number, metadata: any, rawMeta: string, options: ProcessImageOptions) {
+  const filePath = metadata.file;
+  const localFile = await downloadImage(filePath);
+
+  const mainUrl = options.dryRun
+    ? `DRY_RUN_S3_URL/${filePath}`
+    : await uploadToS3(localFile, filePath);
+
+  metadata.s3 = {
+    url: mainUrl,
+    bucket: process.env.AWS_BUCKET_NAME!,
+    key: filePath,
+    provider: 's3',
+    'mime-type': 'image/jpeg',
+    privacy: 'public-read',
+  };
+
+  if (!options.dryRun) {
+    await fs.unlink(localFile);
+  }
+
+  await processSizes(postId, metadata, path.posix.dirname(filePath), options);
+
+  const newMeta = serializeMetadata(metadata);
+
+  if (!options.dryRun) {
+    backupMetadata(postId, rawMeta);
+    await streamPool.promise().query(
+      `UPDATE M3hSHDUe_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_wp_attachment_metadata'`,
+      [newMeta, postId]
+    );
+
+    console.log(`✅ Migrated post ${postId} (main + sizes)`);
+  } else {
+    console.log(`(Dry-run) Would migrate post ${postId} + sizes`);
+  }
+}
+
+// Process the sizes for a post metadata
+async function processSizes(postId: number, metadata: any, basePath: string, options: ProcessImageOptions) {
+  if (!metadata.sizes || typeof metadata.sizes !== 'object') return;
+
+  for (const sizeName in metadata.sizes) {
+    const size = metadata.sizes[sizeName];
+
+    if (size.s3) {
+      console.log(`⏩ Skipping size '${sizeName}' for post ${postId} (already migrated).`);
+      continue;
+    }
+
+    try {
+      const sizeKey = `${basePath}/${size.file}`;
+      const sizeTmp = await downloadImage(sizeKey);
+
+      const sizeUrl = options.dryRun
+        ? `DRY_RUN_S3_URL/${sizeKey}`
+        : await uploadToS3(sizeTmp, sizeKey);
+
+      size.s3 = {
+        url: sizeUrl,
+        bucket: process.env.AWS_BUCKET_NAME!,
+        key: sizeKey,
+        provider: 's3',
+        'mime-type': size['mime-type'] || 'image/jpeg',
+        privacy: 'public-read',
+      };
+
+      if (!options.dryRun) {
+        await fs.unlink(sizeTmp);
+      }
+    } catch (err) {
+      console.warn(`⚠️ Skipping size '${sizeName}' for post ${postId}: ${(err as Error).message}`);
+    }
+  }
 }
