@@ -1,62 +1,81 @@
-import { streamPool } from '../database/mysql-stream';
 import dotenv from 'dotenv';
-import { phpUnserialize } from 'phpunserialize';
+import { streamPool } from '../database/mysql-stream';
+import { unserialize } from 'php-serialize';
 
 dotenv.config();
 
-/**
- * List all images with metadata using stream
- */
+// ---------- Types ----------
+interface SizeData {
+  width: number;
+  height: number;
+  file: string;
+}
+
+interface Metadata {
+  file: string;
+  sizes?: Record<string, SizeData>;
+}
+
+interface Row {
+  ID: number;
+  post_title: string;
+  meta_value: string;
+}
+
+// ---------- Main command ----------
 export async function listCommand() {
-  console.log("🔍 Streaming WordPress images with metadata...");
+  console.log('🔍 Listing all images..');
 
   const query = `
     SELECT p.ID, p.post_title, pm.meta_value
     FROM M3hSHDUe_posts p
     JOIN M3hSHDUe_postmeta pm ON p.ID = pm.post_id
     WHERE p.post_type = 'attachment'
-    AND pm.meta_key = '_wp_attachment_metadata'
+      AND pm.meta_key = '_wp_attachment_metadata'
   `;
 
   const stream = streamPool.query(query).stream();
 
-  let count = 0;
+  let imageCount = 0;
+  let sizeCount = 0;
 
-  interface Metadata {
-    file: string;
-    sizes?: Record<string, SizeData>;
-  }
+  stream.on('data', (row: Row) => {
+    imageCount++;
 
-  interface SizeData {
-    width: number;
-    height: number;
-    file: string;
-  }
-
-  stream.on('data', (row: any) => {
-    count++;
     try {
-      const raw = phpUnserialize(row.meta_value) as Record<string, any>;
-      const metadata: Metadata = {
-        file: raw.file,
-        sizes: raw.sizes ?? {},
-      };
+      const metadata = parseMetadata(row.meta_value);
+      sizeCount += Object.keys(metadata.sizes ?? {}).length;
 
-      console.log(`📸 #${count}: ${row.post_title}`);
-      console.log(`  ▶ Original: ${metadata.file}`);
-      Object.entries(metadata.sizes || {}).forEach(([size, data]) => {
-        console.log(`  - ${size}: ${data.file} (${data.width}x${data.height})`);
-      });
+      logImage(row.post_title, metadata);
     } catch (e) {
       console.error(`❌ Failed to parse metadata for ID ${row.ID}`, e);
     }
   });
 
   stream.on('end', () => {
-    console.log(`✅ Finished streaming ${count} images.`);
+    console.log(`✅ Finished streaming ${imageCount} images and ${sizeCount} sizes.`);
   });
 
   stream.on('error', (err: Error) => {
     console.error('❌ Error during streaming:', err);
+  });
+}
+
+// ---------- Helpers ----------
+function parseMetadata(metaValue: string): Metadata {
+  const raw = unserialize(metaValue) as Record<string, any>;
+
+  return {
+    file: raw.file,
+    sizes: raw.sizes ?? {},
+  };
+}
+
+function logImage(title: string, metadata: Metadata): void {
+  console.log(`📸: ${title}`);
+  console.log(`  ▶ Original: ${metadata.file}`);
+
+  Object.entries(metadata.sizes ?? {}).forEach(([size, data]: [string, SizeData]) => {
+    console.log(`  - ${size}: ${data.file} (${data.width}x${data.height})`);
   });
 }
