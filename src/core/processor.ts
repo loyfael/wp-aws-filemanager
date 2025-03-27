@@ -1,13 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import path from 'path';
-import fs from 'fs/promises';
 import { streamPool } from '../database/mysql-stream';
-import { parseMetadata, serializeMetadata } from '../utils/metadata-parser';
-import { downloadImage } from '../utils/downloader';
-import { uploadToS3 } from '../aws/uploader';
-import { backupMetadata } from '../utils/backup';
 import { processBuffer } from './processBuffer';
 
 /**
@@ -63,81 +57,4 @@ export async function processImages(batchSize: number, options: ProcessImageOpti
   }
 
   console.log(options.dryRun ? 'Dry-run completed.' : 'Migration completed.');
-}
-
-// Process the main image and sizes for a post
-async function processMainImage(postId: number, metadata: any, rawMeta: string, options: ProcessImageOptions) {
-  const filePath = metadata.file;
-  const localFile = await downloadImage(filePath);
-
-  const mainUrl = options.dryRun
-    ? `DRY_RUN_S3_URL/${filePath}`
-    : await uploadToS3(localFile, filePath);
-
-  metadata.s3 = {
-    url: mainUrl,
-    bucket: process.env.AWS_BUCKET_NAME!,
-    key: filePath,
-    provider: 's3',
-    'mime-type': 'image/jpeg',
-    privacy: 'public-read',
-  };
-
-  if (!options.dryRun) {
-    await fs.unlink(localFile);
-  }
-
-  await processSizes(postId, metadata, path.posix.dirname(filePath), options);
-
-  const newMeta = serializeMetadata(metadata);
-
-  if (!options.dryRun) {
-    backupMetadata(postId, rawMeta);
-    await streamPool.promise().query(
-      `UPDATE M3hSHDUe_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_wp_attachment_metadata'`,
-      [newMeta, postId]
-    );
-
-    console.log(`✅ Migrated post ${postId} (main + sizes)`);
-  } else {
-    console.log(`(Dry-run) Would migrate post ${postId} + sizes`);
-  }
-}
-
-// Process the sizes for a post metadata
-async function processSizes(postId: number, metadata: any, basePath: string, options: ProcessImageOptions) {
-  if (!metadata.sizes || typeof metadata.sizes !== 'object') return;
-
-  for (const sizeName in metadata.sizes) {
-    const size = metadata.sizes[sizeName];
-
-    if (size.s3) {
-      console.log(`⏩ Skipping size '${sizeName}' for post ${postId} (already migrated).`);
-      continue;
-    }
-
-    try {
-      const sizeKey = `${basePath}/${size.file}`;
-      const sizeTmp = await downloadImage(sizeKey);
-
-      const sizeUrl = options.dryRun
-        ? `DRY_RUN_S3_URL/${sizeKey}`
-        : await uploadToS3(sizeTmp, sizeKey);
-
-      size.s3 = {
-        url: sizeUrl,
-        bucket: process.env.AWS_BUCKET_NAME!,
-        key: sizeKey,
-        provider: 's3',
-        'mime-type': size['mime-type'] || 'image/jpeg',
-        privacy: 'public-read',
-      };
-
-      if (!options.dryRun) {
-        await fs.unlink(sizeTmp);
-      }
-    } catch (err) {
-      console.warn(`⚠️ Skipping size '${sizeName}' for post ${postId}: ${(err as Error).message}`);
-    }
-  }
 }
