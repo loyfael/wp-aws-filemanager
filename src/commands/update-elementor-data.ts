@@ -1,16 +1,10 @@
 import { pool } from '../database/mysql'
 import fs from 'fs'
 import path from 'path'
-import { logInfo, logSuccess, logError, logWarn } from '../utils/logger'
 import { replaceImageUrlsInElementorData } from '../utils/elementor-parser'
 
 const dryRun = process.argv.includes('--dry-run')
 const apply = process.argv.includes('--apply')
-
-if (!dryRun && !apply) {
-    console.log('Usage: npm run update-elementor-data -- --dry-run | --apply')
-    process.exit(0)
-}
 
 // Optional: load a JSON map of original URLs → S3 URLs if you prebuilt one
 const s3BaseUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/`
@@ -52,7 +46,7 @@ export async function updateElementorDataCommand() {
         try {
             json = JSON.parse(rawMeta)
         } catch (err) {
-            logError(`❌ Invalid JSON for post_id ${postId}`)
+            console.log(`❌ Invalid JSON for post_id ${postId}`)
             continue
         }
 
@@ -70,7 +64,7 @@ export async function updateElementorDataCommand() {
 
         // Log the update action
         if (dryRun) {
-            logWarn(`(Dry-run) Would update _elementor_data for post ${postId}`)
+            console.log(`(Dry-run) Would update _elementor_data for post ${postId}`)
         }
 
         // Apply the update if --apply is set
@@ -79,10 +73,10 @@ export async function updateElementorDataCommand() {
                 `UPDATE M3hSHDUe_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_elementor_data'`,
                 [updatedMeta, postId]
             )
-            logSuccess(`✅ Updated _elementor_data for post ${postId}`)
+            console.log(`✅ Updated _elementor_data for post ${postId}`)
         }
     }
 
     // Log completion message
-    logInfo(dryRun ? 'Dry-run complete.' : 'Update complete.')
+    console.log(dryRun ? 'Dry-run complete.' : 'Update complete.')
 }

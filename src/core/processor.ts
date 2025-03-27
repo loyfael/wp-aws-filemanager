@@ -2,8 +2,7 @@ import { pool } from '../database/mysql'
 import { parseMetadata, serializeMetadata } from '../utils/metadata-parser'
 import { downloadImage } from '../utils/downloader'
 import { uploadToS3 } from '../aws/uploader'
-import { backupMetadata } from '../utils/backup'
-import { logInfo, logSuccess, logWarn, logError } from '../utils/logger'
+import { backupMetadata } from '../utils/backup';
 import path from 'path'
 import fs from 'fs/promises'
 
@@ -31,7 +30,7 @@ export async function processImages(batchSize: number, options: ProcessImageOpti
 
     // Skip if already migrated
     if (metadata?.s3) {
-      logWarn(`Skipping post ${postId}, already migrated.`)
+      console.log(`Skipping post ${postId}, already migrated.`)
       continue
     }
 
@@ -62,7 +61,7 @@ export async function processImages(batchSize: number, options: ProcessImageOpti
           const size = metadata.sizes[sizeName]
 
           if (size.s3) {
-            logWarn(`Skipping size '${sizeName}' for post ${postId} (already migrated).`)
+            console.log(`Skipping size '${sizeName}' for post ${postId} (already migrated).`)
             continue
           }
 
@@ -85,7 +84,7 @@ export async function processImages(batchSize: number, options: ProcessImageOpti
 
             if (!options.dryRun) await fs.unlink(sizeTmp)
           } catch (err) {
-            logError(`Failed to process size '${sizeName}' for post ${postId}: ${(err as Error).message}`)
+            console.log(`Failed to process size '${sizeName}' for post ${postId}: ${(err as Error).message}`)
           }
         }
       }
@@ -99,16 +98,16 @@ export async function processImages(batchSize: number, options: ProcessImageOpti
           [newMeta, postId]
         )
         
-        logSuccess(`✅ Migrated post ${postId} (main + sizes)`)
+        console.log(`✅ Migrated post ${postId} (main + sizes)`)
 
       } else {
-        logWarn(`(Dry-run) Would migrate post ${postId} + sizes`)
+        console.log(`(Dry-run) Would migrate post ${postId} + sizes`)
       }
 
     } catch (err) {
-      logError(`❌ Failed to migrate post ${postId}: ${(err as Error).message}`)
+      console.log(`❌ Failed to migrate post ${postId}: ${(err as Error).message}`)
     }
   }
 
-  logInfo(options.dryRun ? 'Dry-run completed.' : 'Migration completed.')
+  console.log(options.dryRun ? 'Dry-run completed.' : 'Migration completed.')
 }

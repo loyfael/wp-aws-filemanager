@@ -1,6 +1,5 @@
 import { pool } from '../database/mysql'
 import { restoreMetadata } from '../utils/backup'
-import { logInfo } from '../utils/logger'
 
 /**
  * Rollback metadata for a specific post ID from backup table M3hSHDUe_postmeta
@@ -18,5 +17,5 @@ export async function rollbackCommand() {
     `UPDATE M3hSHDUe_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_wp_attachment_metadata'`,
     [rawMeta, postId]
   )
-  logInfo(`Restored metadata for post ${postId}`)
+  console.log(`Restored metadata for post ${postId}`)
 }
