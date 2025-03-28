@@ -9,20 +9,20 @@ import { ProcessImageOptions } from "./processor";
  * @param options 
  */
 export async function processBuffer(rows: any[], options: ProcessImageOptions) {
-    for (const row of rows) {
-      const postId = row.ID;
-      const rawMeta = row.meta_value;
-      const metadata = parseMetadata(rawMeta);
-  
-      if (metadata?.s3) {
-        console.log(`⏩ Skipping post ${postId}, already migrated.`);
-        continue;
-      }
-  
-      try {
-        await processMainImage(postId, metadata, rawMeta, options);
-      } catch (err) {
-        console.error(`❌ Failed to migrate post ${postId}: ${(err as Error).message}`);
-      }
+  for (const row of rows) {
+    const postId = row.ID;
+    const rawMeta = row.meta_value;
+    const metadata = parseMetadata(rawMeta);
+
+    if (metadata?.s3) {
+      console.log(`⏩ Skipping post ${postId}, already migrated.`);
+      continue;
+    }
+
+    try {
+      await processMainImage(postId, metadata, rawMeta, options);
+    } catch (err) {
+      console.error(`❌ Failed to migrate post ${postId}: ${(err as Error).message}`);
     }
   }
+}

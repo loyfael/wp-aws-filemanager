@@ -27,7 +27,6 @@ export async function processImages(batchSize: number, options: ProcessImageOpti
   `;
 
   const stream = streamPool.query(query).stream();
-
   let buffer: any[] = [];
 
   for await (const row of stream) {
@@ -40,7 +39,7 @@ export async function processImages(batchSize: number, options: ProcessImageOpti
       await processBuffer(buffer, options);
       buffer = [];
 
-      if (options.dryRun) break; // Only one sequence in dry-run mode
+      if (options.dryRun) break;
     }
   }
 

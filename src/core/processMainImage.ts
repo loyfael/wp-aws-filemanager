@@ -18,43 +18,46 @@ import { lookup as getMimeType } from 'mime-types';
  * @param options 
  */
 export async function processMainImage(postId: number, metadata: any, rawMeta: string, options: ProcessImageOptions) {
-    const filePath = metadata.file;
-    const localFile = await downloadImage(filePath);
-  
-    console.log(`📤 Uploading main image for post ${postId}: ${filePath}`);
-  
-    const mainResult = options.dryRun
-      ? { url: `DRY_RUN_S3_URL/${filePath}`, 
-        key: filePath, bucket: process.env.AWS_BUCKET_NAME!, 
-        size: 0, 
-        contentType: getMimeType(filePath) || 'application/octet-stream' }
-      : await uploadToS3(localFile, filePath);
-  
-    metadata.s3 = {
-      url: mainResult.url,
-      bucket: mainResult.bucket,
-      key: mainResult.key,
-      provider: 's3',
-      'mime-type': mainResult.contentType,
-      privacy: 'public-read',
-    };
-  
-    if (!options.dryRun) {
-      await fs.unlink(localFile);
+  const filePath = metadata.file;
+  const localFile = await downloadImage(filePath);
+
+  console.log(`📤 Uploading main image for post ${postId}: ${filePath}`);
+
+  const mainResult = options.dryRun
+    ? {
+      url: `DRY_RUN_S3_URL/${filePath}`,
+      key: filePath,
+      bucket: process.env.AWS_BUCKET_NAME!,
+      size: 0,
+      contentType: getMimeType(filePath) || 'application/octet-stream',
     }
-  
-    await processSizes(postId, metadata, path.posix.dirname(filePath), options);
-  
-    const newMeta = serializeMetadata(metadata);
-  
-    if (!options.dryRun) {
-      backupMetadata(postId, rawMeta);
-      await streamPool.query(
-        `UPDATE M3hSHDUe_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_wp_attachment_metadata'`,
-        [newMeta, postId]
-      );
-      console.log(`✅ Migrated post ${postId} (main + sizes)`);
-    } else {
-      console.log(`(Dry-run) Would migrate post ${postId} + sizes`);
-    }
+    : await uploadToS3(localFile, filePath);
+
+  metadata.s3 = {
+    url: mainResult.url,
+    bucket: mainResult.bucket,
+    key: mainResult.key,
+    provider: 's3',
+    'mime-type': mainResult.contentType,
+    privacy: 'public-read',
+  };
+
+  if (!options.dryRun) {
+    await fs.unlink(localFile);
   }
+
+  await processSizes(postId, metadata, path.posix.dirname(filePath), options);
+
+  const newMeta = serializeMetadata(metadata);
+
+  if (!options.dryRun) {
+    backupMetadata(postId, rawMeta);
+    await streamPool.query(
+      `UPDATE M3hSHDUe_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_wp_attachment_metadata'`,
+      [newMeta, postId]
+    );
+    console.log(`✅ Migrated post ${postId} (main + sizes)`);
+  } else {
+    console.log(`(Dry-run) Would migrate post ${postId} + sizes`);
+  }
+}
