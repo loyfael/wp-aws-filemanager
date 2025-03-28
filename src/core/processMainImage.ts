@@ -52,7 +52,7 @@ export async function processMainImage(postId: number, metadata: any, rawMeta: s
 
   if (!options.dryRun) {
     backupMetadata(postId, rawMeta);
-    await streamPool.query(
+    await streamPool.promise().query(
       `UPDATE M3hSHDUe_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_wp_attachment_metadata'`,
       [newMeta, postId]
     );
