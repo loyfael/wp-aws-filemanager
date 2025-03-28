@@ -5,6 +5,7 @@ import { rollbackCommand } from './src/commands/rollback'
 import { updateElementorDataCommand } from './src/commands/update-elementor-data'
 import dotenv from 'dotenv'
 import readline from 'readline'
+import { listS3Command } from './src/commands/list-s3'
 
 dotenv.config()
 
@@ -19,6 +20,7 @@ const commands = {
   'dry-run': dryRunCommand,
   'update-elementor-data': updateElementorDataCommand,
   rollback: rollbackCommand,
+  'S3:list': listS3Command
 }
 
 console.log('\n📦 WP to AWS S3 Migration Tool\n')

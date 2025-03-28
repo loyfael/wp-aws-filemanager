@@ -37,6 +37,8 @@ export async function processSizes(postId: number, metadata: any, basePath: stri
             const sizeKey = `${basePath}/${size.file}`;
             const sizeTmp = await downloadImage(sizeKey);
 
+            console.log(`📤 Uploading ${size.file} to S3...`);
+
             // Upload the size to S3
             const sizeUrl = options.dryRun
                 ? `DRY_RUN_S3_URL/${sizeKey}`

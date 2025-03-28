@@ -19,7 +19,6 @@ export interface ProcessImageOptions {
 export async function processImages(batchSize: number, options: ProcessImageOptions = {}) {
   console.log('🚀 Migration started...');
 
-  // Query all attachment posts with metadata
   const query = `
     SELECT p.ID, m.meta_value
     FROM M3hSHDUe_posts p
@@ -27,19 +26,13 @@ export async function processImages(batchSize: number, options: ProcessImageOpti
     WHERE p.post_type = 'attachment' AND m.meta_key = '_wp_attachment_metadata'
   `;
 
-  // Stream the query results
   const stream = streamPool.query(query).stream();
 
-  // Buffer for batch processing of rows. Permit to process multiple rows at once
   let buffer: any[] = [];
 
-  // Iterate over the stream and process the rows
   for await (const row of stream) {
-
-    // Push the row to the buffer
     buffer.push(row);
 
-    // Check if the buffer is full or the dry-run limit is reached
     const isDryRunLimitReached = options.dryRun && buffer.length >= 500;
     const isBatchFull = !options.dryRun && buffer.length >= batchSize;
 
@@ -51,7 +44,6 @@ export async function processImages(batchSize: number, options: ProcessImageOpti
     }
   }
 
-  // Process the remaining rows in the buffer
   if (buffer.length) {
     await processBuffer(buffer, options);
   }
