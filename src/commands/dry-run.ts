@@ -1,7 +1,8 @@
 import { processImages } from '../core/processor'
 
 /**
- * Dry-run mode for migrating images in batch and upload to S3 bucket with metadata update
+ * Dry-run mode for migrating images in batch and upload to S3 bucket with metadata update.
+ * This command will process all images in the database and simulate the upload to S3.
  */
 export async function dryRunCommand() {
   const batchSize = parseInt(process.env.BATCH_SIZE || '100', 10)

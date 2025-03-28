@@ -5,7 +5,8 @@ import { lookup as getMimeType } from 'mime-types';
 import fs from 'fs/promises';
 
 /**
- * Process the sizes of an image attachment post and upload them to S3
+ * Process the sizes of an image attachment post and upload them to S3.
+ * Also update the metadata with the new S3 URLs.
  * @param postId 
  * @param metadata 
  * @param basePath 

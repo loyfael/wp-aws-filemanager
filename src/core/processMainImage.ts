@@ -18,11 +18,15 @@ import { lookup as getMimeType } from 'mime-types';
  * @param options 
  */
 export async function processMainImage(postId: number, metadata: any, rawMeta: string, options: ProcessImageOptions) {
-  const filePath = metadata.file;
-  const localFile = await downloadImage(filePath);
+  const filePath = metadata.file; // Get the main file path
+  const localFile = await downloadImage(filePath); // Download the main image
 
   console.log(`📤 Uploading main image for post ${postId}: ${filePath}`);
 
+  /**
+   * Upload the main image to S3 and get the result structure
+   * If dry-run is enabled, return a fake result
+   */
   const mainResult = options.dryRun
     ? {
       url: `DRY_RUN_S3_URL/${filePath}`,
@@ -33,6 +37,7 @@ export async function processMainImage(postId: number, metadata: any, rawMeta: s
     }
     : await uploadToS3(localFile, filePath);
 
+  // Update the metadata with the new
   metadata.s3 = {
     url: mainResult.url,
     bucket: mainResult.bucket,
@@ -42,14 +47,20 @@ export async function processMainImage(postId: number, metadata: any, rawMeta: s
     privacy: 'public-read',
   };
 
+  // Remove the local file if not in
   if (!options.dryRun) {
     await fs.unlink(localFile);
   }
 
-  await processSizes(postId, metadata, path.posix.dirname(filePath), options);
+  await processSizes(postId, metadata, path.posix.dirname(filePath), options); // Process the sizes
 
-  const newMeta = serializeMetadata(metadata);
+  const newMeta = serializeMetadata(metadata); // Serialize the new metadata
 
+  /**
+   * Update the post metadata with the new metadata
+   * If dry-run is enabled, skip the update
+   * else backup the metadata and update the database
+   */
   if (!options.dryRun) {
     backupMetadata(postId, rawMeta);
     await streamPool.promise().query(

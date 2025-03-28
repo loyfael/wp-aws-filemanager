@@ -4,6 +4,9 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+/**
+ * Create new S3 client instance
+ */
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
   credentials: {
@@ -12,6 +15,10 @@ const s3 = new S3Client({
   },
 });
 
+/**
+ * List all objects in the S3 bucket and print them to the console.
+ * @returns 
+ */
 export async function listS3Command() {
   console.log(`📦 Listing objects in bucket ${process.env.AWS_BUCKET_NAME}...`);
 

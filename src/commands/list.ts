@@ -22,7 +22,10 @@ interface Row {
   meta_value: string;
 }
 
-// ---------- Main command ----------
+/**
+ * List all images and their sizes in the database
+ * Also display the original file path.
+ */
 export async function listCommand() {
   console.log('🔍 Listing all images..');
 

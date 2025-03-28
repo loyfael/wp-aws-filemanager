@@ -3,6 +3,10 @@ import dotenv from 'dotenv'
 
 dotenv.config()
 
+/**
+ * Create a connection pool to the MySQL database.
+ * Used for streaming large result sets.
+ */
 export const streamPool = mysql.createPool({
   host: process.env.DB_HOST,
   port: Number(process.env.DB_PORT),

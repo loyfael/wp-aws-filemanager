@@ -1,41 +1,63 @@
-# WP AWS File Manager
+# 🗂️ WordPress AWS S3 Image Migrator
 
-## Description
-WP AWS File Manager is a WordPress plugin that allows you to manage files stored on Amazon S3 directly from the WordPress interface. It simplifies remote file management while providing seamless integration with AWS.
+A Node.js/TypeScript CLI tool to migrate WordPress images (including all resized versions) to AWS S3, directly from the `_wp_attachment_metadata` stored in the database.
 
-## Features
-- **S3 File Management**: Upload, download, delete, and organize files.
-- **WordPress Integration**: Intuitive user interface within the WordPress dashboard.
-- **Security**: Permission management for secure file access.
-- **Performance**: Optimized for fast and efficient use with AWS.
+---
 
-## Installation
-1. Clone this repository into the WordPress plugins directory:
-    ```bash
-    git clone https://github.com/your-repo/wp-aws-filemanager.git
-    ```
-2. Activate the plugin from the WordPress interface.
-3. Configure your AWS keys in the plugin settings.
+## 🚀 Installation
 
-## Configuration
-1. Navigate to **Settings > WP AWS File Manager**.
-2. Enter your AWS credentials (Access Key and Secret Key).
-3. Select the S3 bucket to use.
+```bash
+git clone <repo>
+cd <repo>
+npm install
+```
 
-## Requirements
-- WordPress website
-- An AWS account with a configured S3 bucket.
-- Node 18 or higher
+---
 
-## Contribution
-Contributions are welcome! Please submit a pull request or open an issue to report a problem.
+## ⚙️ Configuration
 
-## License
-This project is licensed under the [AGPL GNU v3](LICENSE).
+Create a `.env` file in the root directory:
 
-## Authors
-- **Your Name** - Lead Developer
-- **Contributors** - List of contributors
+```env
+# Database
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=wp_user
+DB_PASSWORD=wp_pass
+DB_NAME=wp_db
 
-## Acknowledgments
-Thanks to the WordPress and AWS communities for their tools and documentation.
+# AWS
+AWS_REGION=eu-west-3
+AWS_ACCESS_KEY_ID=your_key
+AWS_SECRET_ACCESS_KEY=your_secret
+AWS_BUCKET_NAME=your_bucket_name
+```
+
+---
+
+## 🧪 Running the CLI
+
+```bash
+npx ts-node index.ts
+```
+
+Then select one of the available commands.
+
+---
+
+## 📦 Available Commands
+
+| Command                 | Description                                          |
+|------------------------|------------------------------------------------------|
+| `list`                 | List images with their available sizes               |
+| `migrate`              | Run the full migration to AWS S3                     |
+| `dry-run`              | Simulate migration for the first 500 images          |
+| `rollback`             | Restore original metadata from backup                |
+| `update-elementor-data` | Update Elementor image references if needed        |
+| `s3:list`              | List current files in the configured S3 bucket       |
+
+---
+
+## 💾 Metadata Backup
+
+Before updating image metadata in WordPress, the original values are saved in `/backup`.
