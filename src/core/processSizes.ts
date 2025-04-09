@@ -15,14 +15,14 @@ import fs from 'fs/promises';
  */
 export async function processSizes(postId: number, metadata: any, basePath: string, options: ProcessImageOptions) {
     try {
-
-
+        // Skip if no sizes object or not an object
         if (!metadata.sizes || typeof metadata.sizes !== 'object') return;
 
         for (const sizeName in metadata.sizes) {
             const size = metadata.sizes[sizeName];
 
-            if (size.s3) {
+            // If already migrated (with valid S3 data), skip
+            if (size.s3?.url && size.s3?.key && size.s3?.bucket) {
                 console.log(`⏩ Skipping size '${sizeName}' for post ${postId} (already migrated).`);
                 continue;
             }
@@ -43,6 +43,7 @@ export async function processSizes(postId: number, metadata: any, basePath: stri
                     }
                     : await uploadToS3(sizeTmp, sizeKey);
 
+                // Attach new S3 metadata to the size
                 size.s3 = {
                     url: sizeResult.url,
                     bucket: sizeResult.bucket,
@@ -52,9 +53,11 @@ export async function processSizes(postId: number, metadata: any, basePath: stri
                     privacy: 'public-read',
                 };
 
+                // Delete the temporary file if not in dry-run mode
                 if (!options.dryRun) {
                     await fs.unlink(sizeTmp);
                 }
+
             } catch (err) {
                 console.warn(`⚠️ Skipping size '${sizeName}' for post ${postId}: ${(err as Error).message}`);
             }
