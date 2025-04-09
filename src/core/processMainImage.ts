@@ -22,63 +22,71 @@ export async function processMainImage(postId: number, metadata: any, rawMeta: s
 
   if (!filePath || typeof filePath !== 'string') {
     console.warn(`⚠️ Skipping post ${postId}: no valid "file" path in metadata. Value of "file": ${filePath}`);
-    return
+    return;
   }
 
-  const localFile = await downloadImage(filePath); // Download the main image
-  console.log(`📤 Uploading main image for post ${postId}: ${filePath}`);
+  /**
+   * Skip upload if the image has already been migrated to S3
+   */
+  if (metadata.s3?.url && metadata.s3?.key && metadata.s3?.bucket) {
+    console.log(`⏩ Main image already migrated for post ${postId}, skipping upload.`);
+  } else {
+    try {
+      const localFile = await downloadImage(filePath); // Download the main image
+      console.log(`📤 Uploading main image for post ${postId}: ${filePath}`);
 
-  try {
-    /**
-     * Upload the main image to S3 and get the result structure
-     * If dry-run is enabled, return a fake result
-     */
-    const mainResult = options.dryRun
-      ? {
-        url: `DRY_RUN_S3_URL/${filePath}`,
-        key: filePath,
-        bucket: process.env.AWS_BUCKET_NAME!,
-        size: 0,
-        contentType: getMimeType(filePath) || 'application/octet-stream',
+      /**
+       * Upload the main image to S3 and get the result structure
+       * If dry-run is enabled, return a fake result
+       */
+      const mainResult = options.dryRun
+        ? {
+          url: `DRY_RUN_S3_URL/${filePath}`,
+          key: filePath,
+          bucket: process.env.AWS_BUCKET_NAME!,
+          size: 0,
+          contentType: getMimeType(filePath) || 'application/octet-stream',
+        }
+        : await uploadToS3(localFile, filePath);
+
+      // Update the metadata with the new S3 block
+      metadata.s3 = {
+        url: mainResult.url,
+        bucket: mainResult.bucket,
+        key: mainResult.key,
+        provider: 's3',
+        'mime-type': mainResult.contentType,
+        privacy: 'public-read',
+      };
+
+      // Remove the local file if not in dry-run
+      if (!options.dryRun) {
+        await fs.unlink(localFile);
       }
-      : await uploadToS3(localFile, filePath);
 
-    // Update the metadata with the new
-    metadata.s3 = {
-      url: mainResult.url,
-      bucket: mainResult.bucket,
-      key: mainResult.key,
-      provider: 's3',
-      'mime-type': mainResult.contentType,
-      privacy: 'public-read',
-    };
-
-    // Remove the local file if not in
-    if (!options.dryRun) {
-      await fs.unlink(localFile);
+    } catch (error) {
+      console.error(`❌ Failed to upload main image for post ${postId}: ${(error as Error).message}`);
+      return;
     }
-
-    await processSizes(postId, metadata, path.posix.dirname(filePath), options); // Process the sizes
-
-    const newMeta = serializeMetadata(metadata); // Serialize the new metadata
-
-    /**
-     * Update the post metadata with the new metadata
-     * If dry-run is enabled, skip the update
-     * else backup the metadata and update the database
-     */
-    if (!options.dryRun) {
-      backupMetadata(postId, rawMeta);
-      await streamPool.promise().query(
-        `UPDATE M3hSHDUe_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_wp_attachment_metadata'`,
-        [newMeta, postId]
-      );
-      console.log(`✅ Migrated post ${postId} (main + sizes)`);
-    } else {
-      console.log(`(Dry-run) Would migrate post ${postId} + sizes`);
-    }
-  } catch (error) {
-    console.error(`❌ Failed to upload main image for post ${postId}: ${error}`);
   }
 
+  await processSizes(postId, metadata, path.posix.dirname(filePath), options); // Process the sizes
+
+  const newMeta = serializeMetadata(metadata); // Serialize the new metadata
+
+  /**
+   * Update the post metadata with the new metadata
+   * If dry-run is enabled, skip the update
+   * else backup the metadata and update the database
+   */
+  if (!options.dryRun) {
+    backupMetadata(postId, rawMeta);
+    await streamPool.promise().query(
+      `UPDATE M3hSHDUe_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_wp_attachment_metadata'`,
+      [newMeta, postId]
+    );
+    console.log(`✅ Migrated post ${postId} (main + sizes)`);
+  } else {
+    console.log(`(Dry-run) Would migrate post ${postId} + sizes`);
+  }
 }
