@@ -19,8 +19,13 @@ import { lookup as getMimeType } from 'mime-types';
  */
 export async function processMainImage(postId: number, metadata: any, rawMeta: string, options: ProcessImageOptions) {
   const filePath = metadata.file; // Get the main file path
-  const localFile = await downloadImage(filePath); // Download the main image
 
+  if (!filePath || typeof filePath !== 'string') {
+    console.warn(`⚠️ Skipping post ${postId}: no valid "file" path in metadata. Value of "file": ${filePath}`);
+    return
+  }
+
+  const localFile = await downloadImage(filePath); // Download the main image
   console.log(`📤 Uploading main image for post ${postId}: ${filePath}`);
 
   try {

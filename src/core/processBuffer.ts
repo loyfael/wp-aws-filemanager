@@ -21,11 +21,17 @@ export async function processBuffer(rows: any[], options: ProcessImageOptions) {
       const rawMeta = row.meta_value; // Get the raw metadata
       const metadata = parseMetadata(rawMeta); // Parse the metadata
 
+
+      if (!metadata || typeof metadata !== 'object') {
+        console.warn(`⚠️ Skipping post ${postId}: invalid metadata. Metadata: ${metadata}`);
+        continue
+      }
+      
       /**
        * Skip the post if it already have a s3 metadata
        * This permit to avoid processing the same post multiple times
        */
-      if (metadata?.s3) {
+      if (metadata.s3) {
         console.log(`⏩ Skipping post ${postId}, already migrated.`);
         continue;
       }
