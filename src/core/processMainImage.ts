@@ -21,7 +21,7 @@ export async function processMainImage(postId: number, metadata: any, rawMeta: s
   const filePath = metadata.file; // Get the main file path
 
   if (!filePath || typeof filePath !== 'string') {
-    console.warn(`⚠️ Skipping post ${postId}: no valid "file" path in metadata. Value of "file": ${filePath}`);
+    console.warn(`⚠️ Skipping post ${postId}: no valid "file" path in metadata. Value of "file": ${filePath}. Are you sure this file exists?`);
     return;
   }
 
