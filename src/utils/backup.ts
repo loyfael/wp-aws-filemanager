@@ -7,9 +7,13 @@ import path from 'path'
  * @param rawMeta 
  */
 export function backupMetadata(postId: number, rawMeta: string) {
-  const backupPath = path.join('backups', `${postId}.json`)
-  fs.mkdirSync('backups', { recursive: true })
-  fs.writeFileSync(backupPath, JSON.stringify({ postId, rawMeta }, null, 2))
+  try {
+    const backupPath = path.join('backups', `${postId}.json`)
+    fs.mkdirSync('backups', { recursive: true })
+    fs.writeFileSync(backupPath, JSON.stringify({ postId, rawMeta }, null, 2))
+  } catch (error) {
+    console.error(`❌ Failed to backup metadata for post ${postId}: ${(error as Error).message}`)
+  }
 }
 
 /**
@@ -18,8 +22,14 @@ export function backupMetadata(postId: number, rawMeta: string) {
  * @returns 
  */
 export function restoreMetadata(postId: number): string {
-  const backupPath = path.join('backups', `${postId}.json`)
-  const content = fs.readFileSync(backupPath, 'utf-8')
-  const json = JSON.parse(content)
-  return json.rawMeta
+
+  try {
+    const backupPath = path.join('backups', `${postId}.json`)
+    const content = fs.readFileSync(backupPath, 'utf-8')
+    const json = JSON.parse(content)
+    return json.rawMeta
+  } catch (error) {
+    console.error(`❌ Failed to restore metadata for post ${postId}: ${(error as Error).message}`)
+    return ''
+  }
 }

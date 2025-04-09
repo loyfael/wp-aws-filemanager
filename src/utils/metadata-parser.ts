@@ -6,7 +6,13 @@ import { unserialize, serialize } from 'php-serialize'
  * @returns 
  */
 export function parseMetadata(meta: string): any {
-  return unserialize(meta)
+  try {
+    return unserialize(meta)
+  } catch (error) {
+    console.error(`❌ Failed to parse metadata: ${(error as Error).message}`)
+    return {}
+  }
+  
 }
 
 /**
@@ -15,5 +21,10 @@ export function parseMetadata(meta: string): any {
  * @returns 
  */
 export function serializeMetadata(meta: any): string {
-  return serialize(meta)
+  try {
+    return serialize(meta)
+  } catch (error) {
+    console.error(`❌ Failed to serialize metadata: ${(error as Error).message}`)
+    return ''
+  }
 }

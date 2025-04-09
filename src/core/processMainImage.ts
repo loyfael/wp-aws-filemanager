@@ -23,52 +23,57 @@ export async function processMainImage(postId: number, metadata: any, rawMeta: s
 
   console.log(`📤 Uploading main image for post ${postId}: ${filePath}`);
 
-  /**
-   * Upload the main image to S3 and get the result structure
-   * If dry-run is enabled, return a fake result
-   */
-  const mainResult = options.dryRun
-    ? {
-      url: `DRY_RUN_S3_URL/${filePath}`,
-      key: filePath,
-      bucket: process.env.AWS_BUCKET_NAME!,
-      size: 0,
-      contentType: getMimeType(filePath) || 'application/octet-stream',
+  try {
+    /**
+     * Upload the main image to S3 and get the result structure
+     * If dry-run is enabled, return a fake result
+     */
+    const mainResult = options.dryRun
+      ? {
+        url: `DRY_RUN_S3_URL/${filePath}`,
+        key: filePath,
+        bucket: process.env.AWS_BUCKET_NAME!,
+        size: 0,
+        contentType: getMimeType(filePath) || 'application/octet-stream',
+      }
+      : await uploadToS3(localFile, filePath);
+
+    // Update the metadata with the new
+    metadata.s3 = {
+      url: mainResult.url,
+      bucket: mainResult.bucket,
+      key: mainResult.key,
+      provider: 's3',
+      'mime-type': mainResult.contentType,
+      privacy: 'public-read',
+    };
+
+    // Remove the local file if not in
+    if (!options.dryRun) {
+      await fs.unlink(localFile);
     }
-    : await uploadToS3(localFile, filePath);
 
-  // Update the metadata with the new
-  metadata.s3 = {
-    url: mainResult.url,
-    bucket: mainResult.bucket,
-    key: mainResult.key,
-    provider: 's3',
-    'mime-type': mainResult.contentType,
-    privacy: 'public-read',
-  };
+    await processSizes(postId, metadata, path.posix.dirname(filePath), options); // Process the sizes
 
-  // Remove the local file if not in
-  if (!options.dryRun) {
-    await fs.unlink(localFile);
+    const newMeta = serializeMetadata(metadata); // Serialize the new metadata
+
+    /**
+     * Update the post metadata with the new metadata
+     * If dry-run is enabled, skip the update
+     * else backup the metadata and update the database
+     */
+    if (!options.dryRun) {
+      backupMetadata(postId, rawMeta);
+      await streamPool.promise().query(
+        `UPDATE M3hSHDUe_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_wp_attachment_metadata'`,
+        [newMeta, postId]
+      );
+      console.log(`✅ Migrated post ${postId} (main + sizes)`);
+    } else {
+      console.log(`(Dry-run) Would migrate post ${postId} + sizes`);
+    }
+  } catch (error) {
+    console.error(`❌ Failed to upload main image for post ${postId}: ${error}`);
   }
 
-  await processSizes(postId, metadata, path.posix.dirname(filePath), options); // Process the sizes
-
-  const newMeta = serializeMetadata(metadata); // Serialize the new metadata
-
-  /**
-   * Update the post metadata with the new metadata
-   * If dry-run is enabled, skip the update
-   * else backup the metadata and update the database
-   */
-  if (!options.dryRun) {
-    backupMetadata(postId, rawMeta);
-    await streamPool.promise().query(
-      `UPDATE M3hSHDUe_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_wp_attachment_metadata'`,
-      [newMeta, postId]
-    );
-    console.log(`✅ Migrated post ${postId} (main + sizes)`);
-  } else {
-    console.log(`(Dry-run) Would migrate post ${postId} + sizes`);
-  }
 }

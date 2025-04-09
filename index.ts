@@ -76,6 +76,10 @@ rl.question('\n❓ Which command do you want to run? (name or number): ', async 
   }
 
   console.log(`\n🚀 Running command: ${commandName}...\n`)
+
+  /**
+   * Run the selected command.
+   */
   try {
     await commands[commandName as keyof typeof commands]()
     console.log(`\n✅ Command "${commandName}" finished successfully.\n`)
