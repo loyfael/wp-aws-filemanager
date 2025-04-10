@@ -5,6 +5,7 @@ import path from 'path'
 import { S3Client, HeadObjectCommand } from '@aws-sdk/client-s3'
 import readline from 'readline'
 import dotenv from 'dotenv'
+import { appendToLog } from '../utils/logger'
 
 dotenv.config()
 
@@ -17,7 +18,7 @@ const s3 = new S3Client({
 })
 
 /**
- * CLI prompt
+ * CLI prompt for user confirmation
  */
 function askQuestion(query: string): Promise<string> {
   const rl = readline.createInterface({
@@ -35,7 +36,7 @@ function askQuestion(query: string): Promise<string> {
  */
 function fileExistsLocally(filePath: string): boolean {
   const uploadsRoot = process.env.LOCAL_UPLOADS_PATH
-  
+
   if (!uploadsRoot) {
     throw new Error('❌ LOCAL_UPLOADS_PATH is not defined in your .env file.')
   }
@@ -66,16 +67,19 @@ export async function auditImagesCommand() {
   const uploadsRoot = process.env.LOCAL_UPLOADS_PATH
   console.log(`Your uploads path is: ${uploadsRoot}`)
 
-  // 🔒 Validate uploads path at the very beginning
   if (!uploadsRoot) {
-    console.error('❌ Error: LOCAL_UPLOADS_PATH is not defined in your .env file.')
+    const msg = '❌ Error: LOCAL_UPLOADS_PATH is not defined in your .env file.'
+    console.error(msg)
+    appendToLog(msg)
     process.exit(1)
   }
 
   const uploadsDir = path.join(uploadsRoot, 'wp-content', 'uploads')
   if (!fs.existsSync(uploadsDir) || !fs.statSync(uploadsDir).isDirectory()) {
-    console.error(`❌ Error: The path "${uploadsDir}" does not exist or is not a directory.`)
-    console.error(`👉 Check that LOCAL_UPLOADS_PATH is correctly pointing to the root of your WordPress site.`)
+    const msg = `❌ Error: The path "${uploadsDir}" does not exist or is not a directory.`
+    console.error(msg)
+    appendToLog(msg)
+    appendToLog(`👉 Check that LOCAL_UPLOADS_PATH is correctly pointing to the root of your WordPress site.`)
     process.exit(1)
   }
 
@@ -98,29 +102,65 @@ export async function auditImagesCommand() {
     try {
       metadata = parseMetadata(row.meta_value)
     } catch {
-      console.warn(`⚠️ Could not parse metadata for post ${postId}`)
+      const msg = `⚠️ Could not parse metadata for post ${postId}`
+      console.warn(msg)
+      appendToLog(msg)
       continue
     }
 
-    if (!metadata?.s3 || !metadata.file || typeof metadata.s3.key !== 'string') {
-      console.warn(`⚠️ Post ${postId} does not have valid S3 metadata or file path.`)
+    if (!metadata?.file || typeof metadata.file !== 'string') {
+      const msg = `⚠️ Post ${postId} has no valid 'file' in metadata.`
+      console.warn(msg)
+      appendToLog(msg)
       continue
     }
 
-    const key = metadata.s3.key
-    const existsLocally = fileExistsLocally(key)
-    const existsOnS3 = await fileExistsOnS3(key)
+    const filesToCheck: { label: string, key: string }[] = []
 
-    console.log(`📦 Post ${postId}`)
-    console.log(`  ▶ Local: ${existsLocally ? '✅' : '❌'} | S3: ${existsOnS3 ? '✅' : '❌'}`)
+    // Main image
+    if (metadata.s3?.key) {
+      filesToCheck.push({ label: 'main', key: metadata.s3.key })
+    } else {
+      filesToCheck.push({ label: 'main', key: metadata.file })
+    }
 
-    if (existsLocally && existsOnS3) {
-      toDeleteLocally.push(key)
+    // Sizes
+    if (metadata.sizes && typeof metadata.sizes === 'object') {
+      for (const [sizeName, sizeData] of Object.entries(metadata.sizes)) {
+        if (
+          sizeData &&
+          typeof sizeData === 'object' &&
+          'file' in sizeData &&
+          typeof sizeData.file === 'string'
+        ) {
+          const sizeKey = path.posix.join(path.posix.dirname(metadata.file), sizeData.file)
+          filesToCheck.push({ label: sizeName, key: sizeKey })
+        }
+      }
+    }
+
+
+    // Audit all keys (main + sizes)
+    for (const { label, key } of filesToCheck) {
+      const existsLocally = fileExistsLocally(key)
+      const existsOnS3 = await fileExistsOnS3(key)
+
+      console.log(`📦 Post ${postId} - ${label}`)
+      console.log(`  ▶ Local: ${existsLocally ? '✅' : '❌'} | S3: ${existsOnS3 ? '✅' : '❌'}`)
+
+      if (!existsLocally) appendToLog(`⚠️ Missing locally: ${key}`)
+      if (!existsOnS3) appendToLog(`⚠️ Missing in S3: ${key}`)
+
+      if (existsLocally && existsOnS3) {
+        toDeleteLocally.push(key)
+      }
     }
   }
 
-  console.log(`
-🔍 ℹ️ ${toDeleteLocally.length} files have already been imported to AWS and are no longer needed in WP, so they can be deleted.`)
+  const summary = `
+🔍 ℹ️ ${toDeleteLocally.length} files have already been imported to AWS and are no longer needed in WP, so they can be deleted.`
+  console.log(summary)
+  appendToLog(summary)
 
   const answer = await askQuestion('❓ Do you want to delete them now? (y/N): ')
 
@@ -129,15 +169,20 @@ export async function auditImagesCommand() {
       const fullPath = path.join(uploadsRoot, 'wp-content', 'uploads', key)
       try {
         fs.unlinkSync(fullPath)
-        console.log(`🗑️ Deleted: ${key}`)
+        const msg = `🗑️ Deleted: ${key}`
+        console.log(msg)
+        appendToLog(msg)
       } catch (err) {
-        console.warn(`❌ Failed to delete ${key}: ${(err as Error).message}`)
+        const msg = `❌ Failed to delete ${key}: ${(err as Error).message}`
+        console.warn(msg)
+        appendToLog(msg)
       }
     }
   } else {
     console.log('❌ No files deleted.')
+    appendToLog('❌ No files deleted.')
   }
 
   console.log('✅ Audit complete.')
+  appendToLog('✅ Audit complete.')
 }
-  
