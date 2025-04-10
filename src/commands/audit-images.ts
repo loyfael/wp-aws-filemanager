@@ -17,9 +17,6 @@ const s3 = new S3Client({
   },
 })
 
-/**
- * CLI prompt for user confirmation
- */
 function askQuestion(query: string): Promise<string> {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -31,23 +28,13 @@ function askQuestion(query: string): Promise<string> {
   }))
 }
 
-/**
- * Check if a file exists in the local filesystem (/wp-content/uploads/)
- */
 function fileExistsLocally(filePath: string): boolean {
   const uploadsRoot = process.env.LOCAL_UPLOADS_PATH
-
-  if (!uploadsRoot) {
-    throw new Error('❌ LOCAL_UPLOADS_PATH is not defined in your .env file.')
-  }
-
+  if (!uploadsRoot) throw new Error('❌ LOCAL_UPLOADS_PATH is not defined.')
   const fullPath = path.join(uploadsRoot, 'wp-content', 'uploads', filePath)
   return fs.existsSync(fullPath)
 }
 
-/**
- * Check if the file exists on AWS S3
- */
 async function fileExistsOnS3(key: string): Promise<boolean> {
   try {
     await s3.send(new HeadObjectCommand({
@@ -60,26 +47,22 @@ async function fileExistsOnS3(key: string): Promise<boolean> {
   }
 }
 
-/**
- * Analyse metadata of each image to determine its sync state
- */
 export async function auditImagesCommand() {
   const uploadsRoot = process.env.LOCAL_UPLOADS_PATH
   console.log(`Your uploads path is: ${uploadsRoot}`)
 
   if (!uploadsRoot) {
-    const msg = '❌ Error: LOCAL_UPLOADS_PATH is not defined in your .env file.'
-    console.error(msg)
-    appendToLog(msg)
+    console.error('❌ LOCAL_UPLOADS_PATH is not defined in your .env file.')
+    appendToLog('❌ LOCAL_UPLOADS_PATH is not defined in your .env file.')
     process.exit(1)
   }
 
   const uploadsDir = path.join(uploadsRoot, 'wp-content', 'uploads')
   if (!fs.existsSync(uploadsDir) || !fs.statSync(uploadsDir).isDirectory()) {
-    const msg = `❌ Error: The path "${uploadsDir}" does not exist or is not a directory.`
+    const msg = `❌ The path "${uploadsDir}" does not exist or is not a directory.`
     console.error(msg)
     appendToLog(msg)
-    appendToLog(`👉 Check that LOCAL_UPLOADS_PATH is correctly pointing to the root of your WordPress site.`)
+    appendToLog('👉 Check that LOCAL_UPLOADS_PATH points to the root of your WordPress site.')
     process.exit(1)
   }
 
@@ -117,14 +100,12 @@ export async function auditImagesCommand() {
 
     const filesToCheck: { label: string, key: string }[] = []
 
-    // Main image
-    if (metadata.s3 && typeof metadata.s3.key === 'string' && metadata.s3.key.trim()) {
+    if (metadata.s3?.key && typeof metadata.s3.key === 'string') {
       filesToCheck.push({ label: 'main', key: metadata.s3.key })
     } else {
       filesToCheck.push({ label: 'main', key: metadata.file })
     }
 
-    // Sizes
     if (metadata.sizes && typeof metadata.sizes === 'object') {
       for (const [sizeName, sizeData] of Object.entries(metadata.sizes)) {
         if (
@@ -145,7 +126,6 @@ export async function auditImagesCommand() {
       }
     }
 
-    // Audit all files (main + sizes)
     for (const { label, key } of filesToCheck) {
       const existsLocally = fileExistsLocally(key)
       const existsOnS3 = await fileExistsOnS3(key)
@@ -164,10 +144,7 @@ export async function auditImagesCommand() {
 
   const uniqueToDelete = [...new Set(toDeleteLocally)]
 
-  const summary = `
-🔍 ℹ️ ${uniqueToDelete.length} files have already been imported to AWS and are no longer needed in WP, so they can be deleted.`
-  console.log(summary)
-  appendToLog(summary)
+  console.log(`\n🔍 ${uniqueToDelete.length} file(s) are on S3 and local disk, and could be deleted.`)
 
   const answer = await askQuestion('❓ Do you want to delete them now? (y/N): ')
 
@@ -176,9 +153,7 @@ export async function auditImagesCommand() {
       const fullPath = path.join(uploadsRoot, 'wp-content', 'uploads', key)
       try {
         fs.unlinkSync(fullPath)
-        const msg = `🗑️ Deleted: ${key}`
-        console.log(msg)
-        appendToLog(msg)
+        console.log(`🗑️ Deleted: ${key}`)
       } catch (err) {
         const msg = `❌ Failed to delete ${key}: ${(err as Error).message}`
         console.warn(msg)
@@ -187,9 +162,7 @@ export async function auditImagesCommand() {
     }
   } else {
     console.log('❌ No files deleted.')
-    appendToLog('❌ No files deleted.')
   }
 
   console.log('✅ Audit complete.')
-  appendToLog('✅ Audit complete.')
 }
