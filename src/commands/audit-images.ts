@@ -34,7 +34,12 @@ function askQuestion(query: string): Promise<string> {
  * Check if a file exists in the local filesystem (/wp-content/uploads/)
  */
 function fileExistsLocally(filePath: string): boolean {
-  const localPath = path.join(process.env.LOCAL_UPLOADS_PATH!, filePath)
+  const uploadsPath = process.env.LOCAL_UPLOADS_PATH
+  if (!uploadsPath) {
+    throw new Error('❌ LOCAL_UPLOADS_PATH is not defined in your .env file.')
+  }
+
+  const localPath = path.join(uploadsPath, filePath)
   return fs.existsSync(localPath)
 }
 
@@ -57,6 +62,21 @@ async function fileExistsOnS3(key: string): Promise<boolean> {
  * Analyse metadata of each image to determine its sync state
  */
 export async function auditImagesCommand() {
+  const uploadsPath = process.env.LOCAL_UPLOADS_PATH
+
+  // 🔒 Validate uploads path at the very beginning
+  if (!uploadsPath) {
+    console.error('❌ Error: LOCAL_UPLOADS_PATH is not defined in your .env file.')
+    process.exit(1)
+  }
+
+  const uploadsDir = path.join(uploadsPath, 'wp-content/uploads')
+  if (!fs.existsSync(uploadsDir) || !fs.statSync(uploadsDir).isDirectory()) {
+    console.error(`❌ Error: The path "${uploadsDir}" does not exist or is not a directory.`)
+    console.error(`👉 Check that LOCAL_UPLOADS_PATH is correctly pointing to the root of your WordPress site.`)
+    process.exit(1)
+  }
+
   const toDeleteLocally: string[] = []
 
   const query = `
@@ -103,10 +123,9 @@ export async function auditImagesCommand() {
 
   if (answer.toLowerCase() === 'y') {
     toDeleteLocally.forEach(file => {
-      const fullPath = path.join(process.env.LOCAL_UPLOADS_PATH!, file)
+      const fullPath = path.join(uploadsPath, file)
       try {
         fs.unlinkSync(fullPath)
-
         console.log(`🗑️ Deleted: ${file}`)
       } catch (err) {
         console.warn(`❌ Failed to delete ${file}: ${(err as Error).message}`)
