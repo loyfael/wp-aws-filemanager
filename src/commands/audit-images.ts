@@ -17,11 +17,10 @@ const s3 = new S3Client({
   },
 })
 
+const MAX_CONCURRENT_CHECKS = 10
+
 function askQuestion(query: string): Promise<string> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  })
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
   return new Promise(resolve => rl.question(query, ans => {
     rl.close()
     resolve(ans)
@@ -47,13 +46,43 @@ async function fileExistsOnS3(key: string): Promise<boolean> {
   }
 }
 
+// Limite la concurrence manuellement
+async function auditFilesConcurrently<T>(
+  items: T[],
+  handler: (item: T) => Promise<void>
+): Promise<void> {
+  const queue = [...items]
+  const running: Promise<void>[] = []
+
+  while (queue.length > 0 || running.length > 0) {
+    while (running.length < MAX_CONCURRENT_CHECKS && queue.length > 0) {
+      const item = queue.shift()!
+      const task = handler(item).catch(err => {
+        const msg = `❌ Audit failed: ${(err as Error).message}`
+        console.warn(msg)
+        appendToLog(msg)
+      })
+      running.push(task)
+      task.finally(() => {
+        const index = running.indexOf(task)
+        if (index !== -1) running.splice(index, 1)
+      })
+    }
+
+    if (running.length > 0) {
+      await Promise.race(running)
+    }
+  }
+}
+
 export async function auditImagesCommand() {
   const uploadsRoot = process.env.LOCAL_UPLOADS_PATH
   console.log(`Your uploads path is: ${uploadsRoot}`)
 
   if (!uploadsRoot) {
-    console.error('❌ LOCAL_UPLOADS_PATH is not defined in your .env file.')
-    appendToLog('❌ LOCAL_UPLOADS_PATH is not defined in your .env file.')
+    const msg = '❌ LOCAL_UPLOADS_PATH is not defined in your .env file.'
+    console.error(msg)
+    appendToLog(msg)
     process.exit(1)
   }
 
@@ -126,7 +155,7 @@ export async function auditImagesCommand() {
       }
     }
 
-    for (const { label, key } of filesToCheck) {
+    await auditFilesConcurrently(filesToCheck, async ({ label, key }) => {
       const existsLocally = fileExistsLocally(key)
       const existsOnS3 = await fileExistsOnS3(key)
 
@@ -139,15 +168,13 @@ export async function auditImagesCommand() {
       if (existsLocally && existsOnS3) {
         toDeleteLocally.push(key)
       }
-    }
+    })
   }
 
   const uniqueToDelete = [...new Set(toDeleteLocally)]
-
   console.log(`\n🔍 ${uniqueToDelete.length} file(s) are on S3 and local disk, and could be deleted.`)
 
   const answer = await askQuestion('❓ Do you want to delete them now? (y/N): ')
-
   if (answer.toLowerCase() === 'y') {
     for (const key of uniqueToDelete) {
       const fullPath = path.join(uploadsRoot, 'wp-content', 'uploads', key)
