@@ -34,13 +34,13 @@ function askQuestion(query: string): Promise<string> {
  * Check if a file exists in the local filesystem (/wp-content/uploads/)
  */
 function fileExistsLocally(filePath: string): boolean {
-  const uploadsPath = process.env.LOCAL_UPLOADS_PATH
-  if (!uploadsPath) {
+  const uploadsRoot = process.env.LOCAL_UPLOADS_PATH
+  if (!uploadsRoot) {
     throw new Error('❌ LOCAL_UPLOADS_PATH is not defined in your .env file.')
   }
 
-  const localPath = path.join(uploadsPath, filePath)
-  return fs.existsSync(localPath)
+  const fullPath = path.join(uploadsRoot, 'wp-content', 'uploads', filePath)
+  return fs.existsSync(fullPath)
 }
 
 /**
@@ -62,15 +62,15 @@ async function fileExistsOnS3(key: string): Promise<boolean> {
  * Analyse metadata of each image to determine its sync state
  */
 export async function auditImagesCommand() {
-  const uploadsPath = process.env.LOCAL_UPLOADS_PATH
+  const uploadsRoot = process.env.LOCAL_UPLOADS_PATH
 
   // 🔒 Validate uploads path at the very beginning
-  if (!uploadsPath) {
+  if (!uploadsRoot) {
     console.error('❌ Error: LOCAL_UPLOADS_PATH is not defined in your .env file.')
     process.exit(1)
   }
 
-  const uploadsDir = path.join(uploadsPath, 'wp-content/uploads')
+  const uploadsDir = path.join(uploadsRoot, 'wp-content', 'uploads')
   if (!fs.existsSync(uploadsDir) || !fs.statSync(uploadsDir).isDirectory()) {
     console.error(`❌ Error: The path "${uploadsDir}" does not exist or is not a directory.`)
     console.error(`👉 Check that LOCAL_UPLOADS_PATH is correctly pointing to the root of your WordPress site.`)
@@ -100,8 +100,8 @@ export async function auditImagesCommand() {
       continue
     }
 
-    if (!metadata?.s3 || !metadata.file) {
-      console.warn(`⚠️ Post ${postId} does not have S3 metadata or file path.`)
+    if (!metadata?.s3 || !metadata.file || typeof metadata.s3.key !== 'string') {
+      console.warn(`⚠️ Post ${postId} does not have valid S3 metadata or file path.`)
       continue
     }
 
@@ -119,21 +119,23 @@ export async function auditImagesCommand() {
 
   console.log(`
 🔍 ℹ️ ${toDeleteLocally.length} files have already been imported to AWS and are no longer needed in WP, so they can be deleted.`)
+
   const answer = await askQuestion('❓ Do you want to delete them now? (y/N): ')
 
   if (answer.toLowerCase() === 'y') {
-    toDeleteLocally.forEach(file => {
-      const fullPath = path.join(uploadsPath, file)
+    for (const key of toDeleteLocally) {
+      const fullPath = path.join(uploadsRoot, 'wp-content', 'uploads', key)
       try {
         fs.unlinkSync(fullPath)
-        console.log(`🗑️ Deleted: ${file}`)
+        console.log(`🗑️ Deleted: ${key}`)
       } catch (err) {
-        console.warn(`❌ Failed to delete ${file}: ${(err as Error).message}`)
+        console.warn(`❌ Failed to delete ${key}: ${(err as Error).message}`)
       }
-    })
+    }
   } else {
     console.log('❌ No files deleted.')
   }
 
   console.log('✅ Audit complete.')
 }
+  
