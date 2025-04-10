@@ -1,63 +1,114 @@
-# 🗂️ WordPress AWS S3 Image Migrator
+# 📦 wp-aws-filemanager
 
-A Node.js/TypeScript CLI tool to migrate WordPress images (including all resized versions) to AWS S3, directly from the `_wp_attachment_metadata` stored in the database.
+A complete migration, audit, and verification tool for moving WordPress images to AWS S3.
 
----
+## 🔧 Requirements
 
-## 🚀 Installation
+- Node.js 18+
+- TypeScript
+- Access to the WordPress MySQL database
+- A configured AWS S3 bucket
 
-```bash
-git clone <repo>
-cd <repo>
-npm install
-```
+## ⚙️ Environment Configuration
 
----
-
-## ⚙️ Configuration
-
-Create a `.env` file in the root directory:
+Create a `.env` file at the root of your project with the following content:
 
 ```env
-# Database
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=wp_user
-DB_PASSWORD=wp_pass
-DB_NAME=wp_db
+# Absolute path to your WordPress root directory (where wp-content is located)
+LOCAL_UPLOADS_PATH=/var/www/vhosts/avicom-preprod.fr/subdomains/simone-nelson-preprod.fr
 
-# AWS
+# Database connection (MySQL)
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=yourpassword
+DB_DATABASE=wordpress
+
+# AWS credentials
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
 AWS_REGION=eu-west-3
-AWS_ACCESS_KEY_ID=your_key
-AWS_SECRET_ACCESS_KEY=your_secret
-AWS_BUCKET_NAME=your_bucket_name
+AWS_BUCKET_NAME=wp-simonenelson-website
+
+# WordPress uploads URL prefix
+WP_UPLOADS_URL_PREFIX=https://simone-nelson.avicom-preprod.fr/wp-content/uploads/
+
+# Website URL (used to audit image usage)
+SITE_URL=https://simone-nelson.avicom-preprod.fr
+
+# AWS base URL
+AWS_BASE_URL=https://wp-simonenelson-website.s3.eu-west-3.amazonaws.com
 ```
 
----
+## 📁 Project Structure
 
-## 🧪 Running the CLI
+```
+.
+├── src/
+│   ├── commands/
+│   │   ├── migrateImagesCommand.ts       # Migrates WordPress images to AWS
+│   │   ├── auditImagesCommand.ts         # Audits which images can be deleted locally
+│   │   └── checkSiteImagesCommand.ts     # Checks if the site uses AWS images and not local ones
+│   ├── utils/
+│   │   ├── metadata-parser.ts
+│   │   ├── logger.ts
+│   │   └── elementor-parser.ts
+│   └── database/
+│       └── mysql-stream.ts
+```
+
+## 🚀 Commands
+
+### ➤ Migrate images to AWS
 
 ```bash
-npx ts-node index.ts
+npm run migrate:images
 ```
 
-Then select one of the available commands.
+- Downloads images from the WordPress server
+- Uploads them to AWS S3
+- Updates the `_wp_attachment_metadata` accordingly
 
----
+### ➤ Audit local image files
 
-## 📦 Available Commands
+```bash
+npm run audit:images
+```
 
-| Command                 | Description                                          |
-|------------------------|------------------------------------------------------|
-| `list`                 | List images with their available sizes               |
-| `migrate`              | Run the full migration to AWS S3                     |
-| `dry-run`              | Simulate migration for the first 500 images          |
-| `rollback`             | Restore original metadata from backup                |
-| `update-elementor-data` | Update Elementor image references if needed        |
-| `s3:list`              | List current files in the configured S3 bucket       |
+- Checks which files are still present locally and already in AWS
+- Optionally deletes redundant files
+- Logs errors and warnings into `logs/audit.log`
 
----
+### ➤ Verify online image usage
 
-## 💾 Metadata Backup
+```bash
+npm run check:site-images
+```
 
-Before updating image metadata in WordPress, the original values are saved in `/backup`.
+- Parses the sitemap
+- Checks that image URLs do not return 404
+- Verifies that all image URLs point to AWS and not to the server
+- Logs results to `logs/site-images.log`
+
+## 📝 Logs
+
+Logs are automatically written to:
+
+```
+logs/
+├── audit.log
+├── site-images.log
+```
+
+## ✅ TODO
+
+- [x] AWS migration
+- [x] Local + AWS audit
+- [x] Online usage verification
+- [ ] AWS orphaned files cleanup
+- [ ] GitHub Actions integration
+
+## 📄 License
+
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
+
+See [LICENSE](https://www.gnu.org/licenses/agpl-3.0.txt) for more details.
