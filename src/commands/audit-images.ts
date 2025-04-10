@@ -108,8 +108,8 @@ export async function auditImagesCommand() {
       continue
     }
 
-    if (!metadata?.file || typeof metadata.file !== 'string') {
-      const msg = `⚠️ Post ${postId} has no valid 'file' in metadata.`
+    if (typeof metadata.file !== 'string' || !metadata.file.trim()) {
+      const msg = `⚠️ Post ${postId} has invalid or empty 'file' path.`
       console.warn(msg)
       appendToLog(msg)
       continue
@@ -118,7 +118,7 @@ export async function auditImagesCommand() {
     const filesToCheck: { label: string, key: string }[] = []
 
     // Main image
-    if (metadata.s3?.key) {
+    if (metadata.s3 && typeof metadata.s3.key === 'string' && metadata.s3.key.trim()) {
       filesToCheck.push({ label: 'main', key: metadata.s3.key })
     } else {
       filesToCheck.push({ label: 'main', key: metadata.file })
@@ -130,17 +130,22 @@ export async function auditImagesCommand() {
         if (
           sizeData &&
           typeof sizeData === 'object' &&
-          'file' in sizeData &&
-          typeof sizeData.file === 'string'
+          sizeData !== null &&
+          Object.prototype.hasOwnProperty.call(sizeData, 'file') &&
+          typeof (sizeData as { file?: unknown }).file === 'string'
         ) {
-          const sizeKey = path.posix.join(path.posix.dirname(metadata.file), sizeData.file)
+          const file = (sizeData as { file: string }).file
+          const sizeKey = path.posix.join(path.posix.dirname(metadata.file), file)
           filesToCheck.push({ label: sizeName, key: sizeKey })
+        } else {
+          const msg = `⚠️ Skipping size "${sizeName}" of post ${postId} due to invalid structure`
+          console.warn(msg)
+          appendToLog(msg)
         }
       }
     }
 
-
-    // Audit all keys (main + sizes)
+    // Audit all files (main + sizes)
     for (const { label, key } of filesToCheck) {
       const existsLocally = fileExistsLocally(key)
       const existsOnS3 = await fileExistsOnS3(key)
@@ -157,15 +162,17 @@ export async function auditImagesCommand() {
     }
   }
 
+  const uniqueToDelete = [...new Set(toDeleteLocally)]
+
   const summary = `
-🔍 ℹ️ ${toDeleteLocally.length} files have already been imported to AWS and are no longer needed in WP, so they can be deleted.`
+🔍 ℹ️ ${uniqueToDelete.length} files have already been imported to AWS and are no longer needed in WP, so they can be deleted.`
   console.log(summary)
   appendToLog(summary)
 
   const answer = await askQuestion('❓ Do you want to delete them now? (y/N): ')
 
   if (answer.toLowerCase() === 'y') {
-    for (const key of toDeleteLocally) {
+    for (const key of uniqueToDelete) {
       const fullPath = path.join(uploadsRoot, 'wp-content', 'uploads', key)
       try {
         fs.unlinkSync(fullPath)
