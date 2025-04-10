@@ -35,6 +35,7 @@ function askQuestion(query: string): Promise<string> {
  */
 function fileExistsLocally(filePath: string): boolean {
   const uploadsRoot = process.env.LOCAL_UPLOADS_PATH
+  console.log(`Your uploads path is: ${uploadsRoot}`)
   if (!uploadsRoot) {
     throw new Error('❌ LOCAL_UPLOADS_PATH is not defined in your .env file.')
   }
