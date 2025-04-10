@@ -6,6 +6,7 @@ import { updateElementorDataCommand } from './src/commands/update-elementor-data
 import dotenv from 'dotenv'
 import readline from 'readline'
 import { listS3Command } from './src/commands/list-s3'
+import { auditImagesCommand } from './src/commands/audit-images'
 
 dotenv.config()
 
@@ -25,12 +26,13 @@ const rl = readline.createInterface({
  * If your command name contain special characters, please use kebab-case inside a string.
  */
 const commands = {
-  list: listCommand,
-  migrate: migrateCommand,
-  'dry-run': dryRunCommand,
-  'update-elementor-data': updateElementorDataCommand,
-  rollback: rollbackCommand,
-  'S3:list': listS3Command
+  list: listCommand, // List all images in the local filesystem
+  migrate: migrateCommand, // Migrate images from the local filesystem to AWS S3
+  'dry-run': dryRunCommand, // Dry run the migration process
+  'update-elementor-data': updateElementorDataCommand, // Update Elementor data
+  rollback: rollbackCommand, // Rollback the migration process
+  'S3:list': listS3Command, // List all images in AWS S3
+  audit: auditImagesCommand // Audit images to check if they are in sync, and suggest of deleting them
 }
 
 console.log('\n📦 WP to AWS S3 Migration Tool\n')
