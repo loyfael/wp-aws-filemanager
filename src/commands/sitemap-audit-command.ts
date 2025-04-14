@@ -15,38 +15,58 @@ type ImageResult = {
   isAws: boolean;
 };
 
-/**
- * Fetch and parse the sitemap.xml
- */
 async function fetchSitemapUrls(): Promise<string[]> {
   try {
-
     const res = await axios.get(sitemapUrl);
     const parsed = await xml2js.parseStringPromise(res.data);
+    const urls: string[] = [];
 
-    // Vérification de la structure attendue
-    if (!parsed?.urlset?.url || !Array.isArray(parsed.urlset.url)) {
-      console.error('❌ The sitemap format is invalid or empty.');
-      return [];
+    if (parsed.sitemapindex?.sitemap) {
+      const sitemapEntries = parsed.sitemapindex.sitemap;
+      console.log(`📁 Sitemap index found with ${sitemapEntries.length} child sitemaps...`);
+
+      const sitemapPromises = sitemapEntries.map(async (sitemap: any, i: number) => {
+        const loc = sitemap.loc?.[0];
+        if (!loc) return;
+
+        console.log(`  ↪️ [${i + 1}/${sitemapEntries.length}] Fetching: ${loc}`);
+        try {
+          const childRes = await axios.get(loc);
+          const childParsed = await xml2js.parseStringPromise(childRes.data);
+
+          if (childParsed.urlset?.url) {
+            const childUrls = childParsed.urlset.url
+              .map((entry: any) => entry?.loc?.[0])
+              .filter((loc: string | undefined): loc is string => typeof loc === 'string');
+            console.log(`    ✅ Found ${childUrls.length} URLs`);
+            urls.push(...childUrls);
+          }
+        } catch (err) {
+          console.warn(`    ⚠️ Failed to parse: ${loc}`);
+        }
+      });
+
+      await Promise.all(sitemapPromises);
+    } else if (parsed.urlset?.url) {
+      const directUrls = parsed.urlset.url
+        .map((entry: any) => entry?.loc?.[0])
+        .filter((loc: string | undefined): loc is string => typeof loc === 'string');
+      console.log(`📄 Standard sitemap with ${directUrls.length} URLs`);
+      urls.push(...directUrls);
+    } else {
+      console.error('❌ Sitemap format is invalid or empty.');
     }
 
-    // Extraction des URL des balises <loc>
-    return parsed.urlset.url
-      .map((entry: any) => entry?.loc?.[0])
-      .filter((loc: string | undefined): loc is string => typeof loc === 'string');
+    return urls;
   } catch (err) {
-    console.error('❌ Failed to fetch or parse sitemap:', (err as Error).message);
+    console.error('❌ Failed to fetch main sitemap:', (err as Error).message);
     return [];
   }
 }
 
-
-/**
- * Extract image URLs from a given page
- */
 async function extractImagesFromPage(url: string): Promise<ImageResult[]> {
   try {
-    const res = await axios.get(url);
+    const res = await axios.get(url, { timeout: 10000 });
     const $ = load(res.data);
     const images: ImageResult[] = [];
 
@@ -54,9 +74,11 @@ async function extractImagesFromPage(url: string): Promise<ImageResult[]> {
       const src = $(el).attr('src');
       if (!src) return;
 
+      const absoluteUrl = src.startsWith('http') ? src : new URL(src, url).href;
+
       images.push({
         pageUrl: url,
-        imageUrl: src,
+        imageUrl: absoluteUrl,
         status: 'MISSING',
         isAws: src.startsWith(awsBase),
       });
@@ -69,65 +91,88 @@ async function extractImagesFromPage(url: string): Promise<ImageResult[]> {
   }
 }
 
-/**
- * Check status of all images
- */
-async function checkImages(images: ImageResult[]): Promise<ImageResult[]> {
-  const results: ImageResult[] = [];
-
-  for (const image of images) {
-    try {
-      const res = await axios.head(image.imageUrl);
-      results.push({ ...image, status: res.status });
-    } catch (err: any) {
-      results.push({ ...image, status: 404 });
-    }
+async function checkImageStatus(image: ImageResult): Promise<ImageResult> {
+  try {
+    const res = await axios.head(image.imageUrl, { timeout: 8000 });
+    return { ...image, status: res.status };
+  } catch {
+    return { ...image, status: 404 };
   }
-
-  return results;
 }
 
-/**
- * Main command
- */
+async function runWithConcurrency<T>(
+  items: T[],
+  fn: (item: T) => Promise<void>,
+  concurrency = 10
+): Promise<void> {
+  const queue = [...items];
+  const workers: Promise<void>[] = [];
+
+  for (let i = 0; i < concurrency; i++) {
+    const worker = (async () => {
+      while (queue.length > 0) {
+        const item = queue.shift();
+        if (item) await fn(item);
+      }
+    })();
+    workers.push(worker);
+  }
+
+  await Promise.all(workers);
+}
+
 export async function sitemapAuditCommand() {
-  console.log('🧭 Fetching sitemap...');
+  console.time('⏱️ Execution time');
+  console.log('🧭 Starting sitemap audit...');
 
   if (!sitemapUrl) {
-    console.error('❌ SITEMAP_URL is not defined in your .env file.');
+    console.error('❌ SITEMAP_URL is not defined.');
     return;
   }
 
   const pages = await fetchSitemapUrls();
+  console.log(`🔎 Found ${pages.length} pages.`);
 
-  console.log(`🔎 Found ${pages.length} pages. Scanning for images...`);
   let allImages: ImageResult[] = [];
+  let progress = 0;
 
-  for (const page of pages) {
+  for (const [i, page] of pages.entries()) {
     const images = await extractImagesFromPage(page);
     allImages.push(...images);
+
+    if ((i + 1) % 25 === 0 || i + 1 === pages.length) {
+      console.log(`  📄 Processed ${i + 1}/${pages.length} pages... (${allImages.length} images so far)`);
+    }
   }
 
-  console.log(`🖼️ Found ${allImages.length} images. Verifying...`);
+  console.log(`🖼️ Total images found: ${allImages.length}. Verifying status...`);
 
-  const results = await checkImages(allImages);
+  const results: ImageResult[] = [];
 
-  const errors = results.filter(img => img.status === 404 || !img.isAws);
+  await runWithConcurrency(allImages, async (img) => {
+    const checked = await checkImageStatus(img);
+    results.push(checked);
+  }, 25);
 
-  console.log(`\n📊 Report:`);
-  console.log(`- Total images scanned: ${results.length}`);
-  console.log(`- Images with 404: ${errors.filter(e => e.status === 404).length}`);
-  console.log(`- Images not hosted on AWS: ${errors.filter(e => !e.isAws).length}`);
+  const broken = results.filter(img => img.status === 404);
+  const notAws = results.filter(img => !img.isAws);
 
-  if (errors.length > 0) {
-    console.log(`\n❌ Problematic images:`);
+  console.log('\n📊 Audit Report:');
+  console.log(`- Pages scanned: ${pages.length}`);
+  console.log(`- Images scanned: ${results.length}`);
+  console.log(`- Broken images (404): ${broken.length}`);
+  console.log(`- Images not hosted on AWS: ${notAws.length}`);
+  console.log(`- Images not hosted on AWS: ${notAws.length}`);
 
-    for (const err of errors) {
-      console.log(`• ${err.imageUrl} (from ${err.pageUrl}) → Status: ${err.status} | AWS: ${err.isAws ? '✅' : '❌'}`);
+  if (broken.length > 0 || notAws.length > 0) {
+    console.log('\n❌ Problematic images:');
+    for (const img of [...broken, ...notAws]) {
+      console.log(`• ${img.imageUrl} (from ${img.pageUrl}) → Status: ${img.status} | AWS: ${img.isAws ? '✅' : '❌'}`);
     }
   } else {
-    console.log('✅ No issues found.');
+    console.log('✅ All images are valid and correctly hosted on AWS.');
   }
 
-  console.log('\n✅ Sitemap audit complete.');
+  console.timeEnd('⏱️ Execution time');
 }
+
