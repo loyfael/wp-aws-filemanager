@@ -31,7 +31,7 @@ type Stat = {
   totalSize: number
 }
 
-export async function listCommand() {
+export async function listCommand(): Promise<void> {
   console.log('🔍 Fetching image data...')
 
   const query = `
@@ -42,77 +42,81 @@ export async function listCommand() {
       AND pm.meta_key = '_wp_attachment_metadata'
   `
 
-  const stream = streamPool.query(query).stream()
-
   const stats: Record<string, Stat> = {}
   let totalImages = 0
   let totalSizes = 0
 
-  stream.on('data', (row: Row) => {
-    try {
-      const metadata = parseMetadata(row.meta_value)
-      totalImages++
+  const stream = streamPool.query(query).stream()
 
-      for (const [size, data] of Object.entries(metadata.sizes ?? {})) {
-        if (!data?.width || !data?.height) continue
-        totalSizes++
+  await new Promise<void>((resolve, reject) => {
+    stream.on('data', (row: Row) => {
+      try {
+        const metadata = parseMetadata(row.meta_value)
+        totalImages++
 
-        stats[size] ??= {
-          count: 0,
-          totalWidth: 0,
-          totalHeight: 0,
-          resolutions: {},
-          totalSize: 0,
+        for (const [size, data] of Object.entries(metadata.sizes ?? {})) {
+          if (!data?.width || !data?.height) continue
+          totalSizes++
+
+          stats[size] ??= {
+            count: 0,
+            totalWidth: 0,
+            totalHeight: 0,
+            resolutions: {},
+            totalSize: 0,
+          }
+
+          const stat = stats[size]
+          stat.count++
+          stat.totalWidth += data.width
+          stat.totalHeight += data.height
+          stat.totalSize += data.filesize || 0
+
+          const res = `${data.width}x${data.height}`
+          stat.resolutions[res] = (stat.resolutions[res] || 0) + 1
         }
-
-        const stat = stats[size]
-        stat.count++
-        stat.totalWidth += data.width
-        stat.totalHeight += data.height
-        stat.totalSize += data.filesize || 0
-
-        const res = `${data.width}x${data.height}`
-        stat.resolutions[res] = (stat.resolutions[res] || 0) + 1
+      } catch (e) {
+        console.warn(`⚠️ Failed to parse metadata for ID ${row.ID}`)
       }
-    } catch (e) {
-      console.warn(`⚠️ Failed to parse metadata for ID ${row.ID}`)
-    }
-  })
+    })
 
-  stream.on('end', () => {
-    const output: any[][] = []
-    output.push([
-      'Type',
-      'Count',
-      'Avg Width',
-      'Avg Height',
-      'Most Common Res',
-      'Total Size',
-    ])
-
-    for (const [type, stat] of Object.entries(stats)) {
-      const avgWidth = Math.round(stat.totalWidth / stat.count)
-      const avgHeight = Math.round(stat.totalHeight / stat.count)
-      const mostCommonRes = Object.entries(stat.resolutions).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'
-      const formattedSize = formatBytes(stat.totalSize)
-
+    stream.on('end', () => {
+      const output: any[][] = []
       output.push([
-        type,
-        stat.count,
-        avgWidth,
-        avgHeight,
-        mostCommonRes,
-        formattedSize,
+        'Type',
+        'Count',
+        'Avg Width',
+        'Avg Height',
+        'Most Common Res',
+        'Total Size',
       ])
-    }
 
-    console.log(`\n📊 Summary for ${totalImages} images and ${totalSizes} sizes:\n`)
-    console.log(table(output))
-    console.log('✅ Done.')
-  })
+      for (const [type, stat] of Object.entries(stats)) {
+        const avgWidth = Math.round(stat.totalWidth / stat.count)
+        const avgHeight = Math.round(stat.totalHeight / stat.count)
+        const mostCommonRes = Object.entries(stat.resolutions).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'
+        const formattedSize = formatBytes(stat.totalSize)
 
-  stream.on('error', (err: Error) => {
-    console.error('❌ Error during streaming:', err)
+        output.push([
+          type,
+          stat.count,
+          avgWidth,
+          avgHeight,
+          mostCommonRes,
+          formattedSize,
+        ])
+      }
+
+      console.log(`\n📊 Summary for ${totalImages} images and ${totalSizes} sizes:\n`)
+      console.log(table(output))
+      console.log('✅ Done.')
+      resolve()
+    })
+
+    stream.on('error', (err: Error) => {
+      console.error('❌ Error during streaming:', err)
+      reject(err)
+    })
   })
 }
 
