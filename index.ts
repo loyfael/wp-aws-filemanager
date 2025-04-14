@@ -7,6 +7,7 @@ import dotenv from 'dotenv'
 import readline from 'readline'
 import { listS3Command } from './src/commands/list-s3'
 import { auditImagesCommand } from './src/commands/audit-images'
+import { sitemapAuditCommand } from './src/commands/sitemap-audit-command'
 
 dotenv.config()
 
@@ -32,7 +33,8 @@ const commands = {
   'update-elementor-data': updateElementorDataCommand, // Update Elementor data
   rollback: rollbackCommand, // Rollback the migration process
   'S3:list': listS3Command, // List all images in AWS S3
-  audit: auditImagesCommand // Audit images to check if they are in sync, and suggest of deleting them
+  audit: auditImagesCommand, // Audit images to check if they are in sync, and suggest of deleting them
+  'image-urls-audit': sitemapAuditCommand
 }
 
 console.log('\n📦 WP to AWS S3 Migration Tool\n')
