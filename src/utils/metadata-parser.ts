@@ -7,12 +7,18 @@ import { unserialize, serialize } from 'php-serialize'
  */
 export function parseMetadata(meta: string): any {
   try {
-    return unserialize(meta)
+    const parsed = unserialize(meta);
+
+    if (!parsed || typeof parsed !== 'object') {
+      console.warn(`⚠️ Metadata unserialized but result is not an object: ${typeof parsed}`);
+      return null;
+    }
+
+    return parsed;
   } catch (error) {
-    console.error(`❌ Failed to parse metadata: ${(error as Error).message}`)
-    return {}
+    console.error(`❌ Failed to parse metadata: ${(error as Error).message}`);
+    return null;
   }
-  
 }
 
 /**

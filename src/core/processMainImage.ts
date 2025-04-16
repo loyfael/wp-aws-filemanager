@@ -8,6 +8,13 @@ import { backupMetadata } from "../utils/backup";
 import { streamPool } from "../database/mysql-stream";
 import { ProcessImageOptions } from "./processor";
 import { lookup as getMimeType } from 'mime-types';
+import fsSync from 'fs';
+
+const logPath = path.resolve('migration-report.txt');
+function log(message: string) {
+    fsSync.appendFileSync(logPath, message + '\n');
+    console.log(message);
+}
 
 /**
  * Process the main image and sizes for a post attachment
@@ -21,7 +28,7 @@ export async function processMainImage(postId: number, metadata: any, rawMeta: s
   const filePath = metadata.file; // Get the main file path
 
   if (!filePath || typeof filePath !== 'string') {
-    console.warn(`⚠️ Skipping post ${postId}: no valid "file" path in metadata. Value of "file": ${filePath}. Are you sure this file exists?`);
+    log(`⚠️ Skipping post ${postId}: no valid "file" path in metadata. Value of "file": ${filePath}. Are you sure this file exists?`);
     return;
   }
 
@@ -33,7 +40,7 @@ export async function processMainImage(postId: number, metadata: any, rawMeta: s
   } else {
     try {
       const localFile = await downloadImage(filePath); // Download the main image
-      console.log(`📤 Uploading main image for post ${postId}: ${filePath}`);
+      log(`📤 Uploading main image for post ${postId}: ${filePath}`);
 
       /**
        * Upload the main image to S3 and get the result structure
@@ -65,7 +72,7 @@ export async function processMainImage(postId: number, metadata: any, rawMeta: s
       }
 
     } catch (error) {
-      console.error(`❌ Failed to upload main image for post ${postId}: ${(error as Error).message}`);
+      log(`❌ Failed to upload main image for post ${postId}: ${(error as Error).message}`);
       return;
     }
   }

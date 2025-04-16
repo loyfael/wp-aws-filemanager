@@ -3,6 +3,15 @@ import { downloadImage } from "../utils/downloader";
 import { ProcessImageOptions } from "./processor";
 import { lookup as getMimeType } from 'mime-types';
 import fs from 'fs/promises';
+import path from 'path';
+import fsSync from 'fs';
+
+// ---------- Log system ----------
+const logPath = path.resolve('migration-sizes-report.txt');
+function log(message: string) {
+    fsSync.appendFileSync(logPath, message + '\n');
+    console.log(message);
+}
 
 /**
  * Process the sizes of an image attachment post and upload them to S3.
@@ -11,17 +20,24 @@ import fs from 'fs/promises';
  * @param metadata 
  * @param basePath 
  * @param options 
- * @returns 
  */
 export async function processSizes(postId: number, metadata: any, basePath: string, options: ProcessImageOptions) {
     try {
-        // Skip if no sizes object or not an object
         if (!metadata.sizes || typeof metadata.sizes !== 'object') return;
 
         for (const sizeName in metadata.sizes) {
             const size = metadata.sizes[sizeName];
 
-            // If already migrated (with valid S3 data), skip
+            if (
+                !size ||
+                typeof size !== 'object' ||
+                typeof size.file !== 'string' ||
+                !size.file.trim()
+            ) {
+                console.log(`⚠️ Skipping size '${sizeName}' for post ${postId}: invalid or missing 'file' field.`);
+                continue;
+            }
+
             if (size.s3?.url && size.s3?.key && size.s3?.bucket) {
                 console.log(`⏩ Skipping size '${sizeName}' for post ${postId} (already migrated).`);
                 continue;
@@ -31,7 +47,7 @@ export async function processSizes(postId: number, metadata: any, basePath: stri
                 const sizeKey = `${basePath}/${size.file}`;
                 const sizeTmp = await downloadImage(sizeKey);
 
-                console.log(`📤 Uploading size '${sizeName}' for post ${postId}: ${sizeKey}`);
+                log(`📤 Uploading size '${sizeName}' for post ${postId}: ${sizeKey}`);
 
                 const sizeResult = options.dryRun
                     ? {
@@ -43,7 +59,6 @@ export async function processSizes(postId: number, metadata: any, basePath: stri
                     }
                     : await uploadToS3(sizeTmp, sizeKey);
 
-                // Attach new S3 metadata to the size
                 size.s3 = {
                     url: sizeResult.url,
                     bucket: sizeResult.bucket,
@@ -53,16 +68,15 @@ export async function processSizes(postId: number, metadata: any, basePath: stri
                     privacy: 'public-read',
                 };
 
-                // Delete the temporary file if not in dry-run mode
                 if (!options.dryRun) {
                     await fs.unlink(sizeTmp);
                 }
 
             } catch (err) {
-                console.warn(`⚠️ Skipping size '${sizeName}' for post ${postId}: ${(err as Error).message}`);
+                console.log(`⚠️ Skipping size '${sizeName}' for post ${postId}: ${(err as Error).message}`);
             }
         }
     } catch (err) {
-        console.error(`❌ Failed to process sizes for post ${postId}: ${(err as Error).message}`);
+        log(`❌ Failed to process sizes for post ${postId}: ${(err as Error).message}`);
     }
 }
