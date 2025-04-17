@@ -1,113 +1,117 @@
-# 📦 wp-aws-filemanager
+# 🗂️ WordPress to AWS S3 Media Migration Tool
 
-A complete migration, audit, and verification tool for moving WordPress images to AWS S3.
+This project provides a set of scripts to **migrate**, **verify**, and **audit** WordPress media files from a traditional local filesystem (`wp-content/uploads`) to **Amazon S3**, along with **metadata synchronization** to update `_wp_attachment_metadata`.
 
-## 🔧 Requirements
+> ⚠️ **Warning**  
+> This tool is powerful and potentially destructive. It modifies your WordPress database and interacts directly with your AWS S3 bucket. Make sure to **test on a staging environment first**.
 
-- Node.js 18+
-- TypeScript
-- Access to the WordPress MySQL database
-- A configured AWS S3 bucket
+---
 
-## ⚙️ Environment Configuration
+## 🚀 What it does
 
-Create a `.env` file at the root of your project with the following content:
+- ✅ Migrates media files from your WordPress server to AWS S3
+- 📌 Updates `_wp_attachment_metadata` in the database with new S3 metadata
+- 🔁 Supports reprocessing missing or broken images
+- 🔍 Provides detailed audit and reporting for image presence on S3 vs local
+- ⚙️ Works in **batch** mode for performance and stability
+- 🧪 Includes a `dry-run` mode for testing
+
+---
+
+## ⚙️ Technologies Used
+
+| Stack            | Purpose                            |
+|------------------|------------------------------------|
+| TypeScript       | Type-safe core logic               |
+| Node.js (18+)    | Runtime                            |
+| MySQL            | WordPress database access          |
+| AWS SDK v3       | Uploads and S3 checks              |
+
+---
+
+## 📝 Environment Configuration
+
+Create a `.env` file in the root:
 
 ```env
-# Absolute path to your WordPress root directory (where wp-content is located)
-LOCAL_UPLOADS_PATH=/var/www/vhosts/avicom-preprod.fr/subdomains/simone-nelson-preprod.fr
+# WordPress
+LOCAL_UPLOADS_PATH=/var/www/vhosts/your-site/wp-content/uploads
 
-# Database connection (MySQL)
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=yourpassword
-DB_DATABASE=wordpress
+# AWS
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_BUCKET_NAME=your-bucket
+AWS_REGION=eu-west-1
 
-# AWS credentials
-AWS_ACCESS_KEY_ID=your-access-key
-AWS_SECRET_ACCESS_KEY=your-secret-key
-AWS_REGION=eu-west-3
-AWS_BUCKET_NAME=wp-simonenelson-website
-
-# WordPress uploads URL prefix
-WP_UPLOADS_URL_PREFIX=https://simone-nelson.avicom-preprod.fr/wp-content/uploads/
-
-# Website URL (used to audit image usage)
-SITE_URL=https://simone-nelson.avicom-preprod.fr
-
-# AWS base URL
-AWS_BASE_URL=https://wp-simonenelson-website.s3.eu-west-3.amazonaws.com
+# Optional
+SITEMAP_URL=https://your-site/sitemap_index.xml
 ```
 
-## 📁 Project Structure
+---
 
-```
-.
-├── src/
-│   ├── commands/
-│   │   ├── migrateImagesCommand.ts       # Migrates WordPress images to AWS
-│   │   ├── auditImagesCommand.ts         # Audits which images can be deleted locally
-│   │   └── checkSiteImagesCommand.ts     # Checks if the site uses AWS images and not local ones
-│   ├── utils/
-│   │   ├── metadata-parser.ts
-│   │   ├── logger.ts
-│   │   └── elementor-parser.ts
-│   └── database/
-│       └── mysql-stream.ts
-```
-
-## 🚀 Commands
-
-### ➤ Migrate images to AWS
+## 📦 Migration Usage
 
 ```bash
-npm run migrate:images
+npm start
+```
+And choose your command.
+You can pass optional flags:
+
+| Option         | Description                                |
+|----------------|--------------------------------------------|
+| `--dryRun`     | Simulates migration without uploading       |
+| `--batchSize`  | Default: 50. Controls batch processing size |
+| `--batchOffset`| Start from specific post ID offset          |
+
+---
+
+## 🔍 Audit Usage
+
+### 🔧 `auditImagesCommand`
+
+Checks if files listed in WordPress metadata exist locally and on AWS S3.
+
+- Will prompt to delete local files if already uploaded
+- Requires `LOCAL_UPLOADS_PATH` set in `.env`
+
+### 🗺️ `sitemapAuditCommand`
+
+Parses sitemap and scans all `<img>` tags to verify:
+- If the image is on AWS
+- If it returns a 404
+
+Optional log file `sitemap-audit-report.txt` is generated.
+
+---
+
+## 📊 Media Statistics
+
+Use this to analyze how many images you have, what sizes exist, and where they are stored.
+
+Sample output:
+
+```
+📊 Summary for 3,854 images and 14,520 sizes:
+
+Type          Count   Avg Width   Avg Height   Most Common Res   Total Size
+thumbnail     3854    150         150          150x150            85 MB
+medium        3841    300         169          300x169            180 MB
+large         3800    1024        576          1024x576           340 MB
+...
 ```
 
-- Downloads images from the WordPress server
-- Uploads them to AWS S3
-- Updates the `_wp_attachment_metadata` accordingly
+---
 
-### ➤ Audit local image files
+## 🧠 Things to Watch Out For
 
-```bash
-npm run audit:images
-```
+- Make sure **all WordPress metadata is valid**.
+- Some `meta_value` fields might be corrupted or empty.
+- SVGs and non-image files might not have `sizes` data.
+- Broken media files (404s or missing from disk) must be handled manually.
+- Use the `audit` command to clean up safely.
+---
 
-- Checks which files are still present locally and already in AWS
-- Optionally deletes redundant files
-- Logs errors and warnings into `logs/audit.log`
-
-### ➤ Verify online image usage
-
-```bash
-npm run check:site-images
-```
-
-- Parses the sitemap
-- Checks that image URLs do not return 404
-- Verifies that all image URLs point to AWS and not to the server
-- Logs results to `logs/site-images.log`
-
-## 📝 Logs
-
-Logs are automatically written to:
-
-```
-logs/
-├── audit.log
-├── site-images.log
-```
-
-## ✅ TODO
-
-- [x] AWS migration
-- [x] Local + AWS audit
-- [x] Online usage verification
-- [ ] AWS orphaned files cleanup
-- [ ] GitHub Actions integration
-
-## 📄 License
+## 📃 License
 
 This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
 
