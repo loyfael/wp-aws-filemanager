@@ -1,13 +1,12 @@
 import { migrateCommand } from './src/commands/migrate'
 import { listCommand } from './src/commands/list'
-import { dryRunCommand } from './src/commands/dry-run'
-import { rollbackCommand } from './src/commands/rollback'
 import { updateElementorDataCommand } from './src/commands/update-elementor-data'
 import dotenv from 'dotenv'
 import readline from 'readline'
 import { listS3Command } from './src/commands/list-s3'
 import { auditImagesCommand } from './src/commands/audit-images'
 import { sitemapAuditCommand } from './src/commands/sitemap-audit-command'
+import { cleanupOrphansCommand } from './src/commands/cleanup-orphans'
 
 dotenv.config()
 
@@ -29,12 +28,11 @@ const rl = readline.createInterface({
 const commands = {
   list: listCommand, // List all images in the local filesystem
   migrate: migrateCommand, // Migrate images from the local filesystem to AWS S3
-  'dry-run': dryRunCommand, // Dry run the migration process
   'update-elementor-data': updateElementorDataCommand, // Update Elementor data
-  rollback: rollbackCommand, // Rollback the migration process
   'S3:list': listS3Command, // List all images in AWS S3
-  audit: auditImagesCommand, // Audit images to check if they are in sync, and suggest of deleting them
-  'image-urls-audit': sitemapAuditCommand
+  "migrate-verify": auditImagesCommand, // Audit images to check if they are in sync, and suggest of deleting them
+  'image-urls-audit': sitemapAuditCommand,
+  'cleanup-orphans': cleanupOrphansCommand
 }
 
 console.log('\n📦 WP to AWS S3 Migration Tool\n')

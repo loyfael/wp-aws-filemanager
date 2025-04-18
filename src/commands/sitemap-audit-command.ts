@@ -18,13 +18,13 @@ type ImageResult = {
   isAws: boolean;
 };
 
-// Append only the final summary
-function appendLog(lines: string[]) {
-  fs.writeFileSync(logFilePath, lines.join('\n') + '\n');
+function appendLog(line: string) {
+  fs.appendFileSync(logFilePath, line + '\n');
 }
 
 async function fetchSitemapUrls(): Promise<string[]> {
   try {
+    console.log(`\n📡 Fetching sitemap from ${sitemapUrl}...`);
     const res = await axios.get(sitemapUrl);
     const parsed = await xml2js.parseStringPromise(res.data);
     const urls: string[] = [];
@@ -35,19 +35,21 @@ async function fetchSitemapUrls(): Promise<string[]> {
       for (const [i, sitemap] of sitemapEntries.entries()) {
         const loc = sitemap.loc?.[0];
         if (!loc) continue;
-        console.log(`  ↪️ ${i + 1}/${sitemapEntries.length}: ${loc}`);
         try {
+          console.log(`📄 Parsing child sitemap ${i + 1}/${sitemapEntries.length} : ${loc}`);
           const child = await axios.get(loc);
           const childParsed = await xml2js.parseStringPromise(child.data);
           const urlsFound = childParsed.urlset?.url
             ?.map((u: any) => u.loc?.[0])
             .filter((u: string | undefined): u is string => typeof u === 'string');
           if (urlsFound?.length) {
+            console.log(`    ✅ Found ${urlsFound.length} URLs in ${loc}`);
             urls.push(...urlsFound);
-            console.log(`    ✅ ${urlsFound.length} pages`);
           }
         } catch {
-          console.warn(`    ⚠️ Could not parse child sitemap: ${loc}`);
+          const msg = `⚠️ Could not parse child sitemap: ${loc}`;
+          console.warn(msg);
+          appendLog(msg);
         }
       }
     } else if (parsed.urlset?.url) {
@@ -59,31 +61,64 @@ async function fetchSitemapUrls(): Promise<string[]> {
 
     return urls;
   } catch (err) {
-    console.error('❌ Failed to fetch main sitemap:', (err as Error).message);
+    const msg = `❌ Failed to fetch sitemap: ${(err as Error).message}`;
+    console.error(msg);
+    appendLog(msg);
     return [];
   }
 }
 
-async function extractImagesFromPage(url: string): Promise<ImageResult[]> {
+async function extractAllImageUrls(url: string): Promise<ImageResult[]> {
   try {
+    console.log(`🌐 Fetching page ${url}`);
     const res = await axios.get(url, { timeout: 10000 });
     const $ = load(res.data);
-    return $('img')
-      .map((_, el) => {
-        const src = $(el).attr('src');
-        if (!src) return null;
+    const images: Set<string> = new Set();
+
+    $('img').each((_, el) => {
+      const src = $(el).attr('src');
+      if (src) {
         const abs = src.startsWith('http') ? src : new URL(src, url).href;
-        return {
-          pageUrl: url,
-          imageUrl: abs,
-          status: 'MISSING',
-          isAws: abs.startsWith(awsBase),
-        };
-      })
-      .get()
-      .filter(Boolean) as ImageResult[];
-  } catch {
-    console.warn(`❌ Could not fetch: ${url}`);
+        images.add(abs);
+      }
+    });
+
+    $('[style]').each((_, el) => {
+      const style = $(el).attr('style') || '';
+      const matches = [...style.matchAll(/url\((['"]?)(.*?)\1\)/g)];
+      for (const match of matches) {
+        const src = match[2];
+        if (src) {
+          const abs = src.startsWith('http') ? src : new URL(src, url).href;
+          images.add(abs);
+        }
+      }
+    });
+
+    $('style').each((_, el) => {
+      const styleContent = $(el).html() || '';
+      const matches = [...styleContent.matchAll(/url\((['"]?)(.*?)\1\)/g)];
+      for (const match of matches) {
+        const src = match[2];
+        if (src) {
+          const abs = src.startsWith('http') ? src : new URL(src, url).href;
+          images.add(abs);
+        }
+      }
+    });
+
+    console.log(`    🖼️ Found ${images.size} image(s) in ${url}`);
+
+    return [...images].map(imageUrl => ({
+      pageUrl: url,
+      imageUrl,
+      status: 'MISSING',
+      isAws: imageUrl.startsWith(awsBase),
+    }));
+  } catch (err) {
+    const msg = `❌ Failed to fetch page: ${url}`;
+    console.warn(msg);
+    appendLog(msg);
     return [];
   }
 }
@@ -103,12 +138,14 @@ async function checkImageStatus(img: ImageResult): Promise<ImageResult> {
 
 export async function sitemapAuditCommand() {
   console.time('⏱️ Execution time');
-  fs.writeFileSync(logFilePath, ''); // On nettoie le fichier au lancement
+  fs.writeFileSync(logFilePath, '');
 
   const PQueue = (await import('p-queue')).default;
 
   if (!sitemapUrl) {
-    console.error('❌ SITEMAP_URL is not defined.');
+    const msg = '❌ SITEMAP_URL is not defined.';
+    console.error(msg);
+    appendLog(msg);
     return;
   }
 
@@ -117,33 +154,32 @@ export async function sitemapAuditCommand() {
   console.log(`🔎 Found ${pages.length} pages`);
 
   let allImages: ImageResult[] = [];
+  const failedPages: string[] = [];
 
   for (const [i, page] of pages.entries()) {
-    const images = await extractImagesFromPage(page);
+    console.log(`📃 Processing page ${i + 1}/${pages.length}: ${page}`);
+    const images = await extractAllImageUrls(page);
+    if (images.length === 0) failedPages.push(page);
     allImages.push(...images);
 
     if ((i + 1) % 25 === 0 || i + 1 === pages.length) {
-      console.log(`  📄 ${i + 1}/${pages.length} pages processed — ${allImages.length} images`);
+      console.log(`  📄 ${i + 1}/${pages.length} pages processed — ${allImages.length} image refs`);
     }
   }
 
-  console.log(`🖼️ Total images collected: ${allImages.length}`);
-
-  // Optimisation : ne vérifier que les images AWS
-  const toCheck = allImages.filter(img => img.isAws);
-  const notAws = allImages.filter(img => !img.isAws);
+  console.log(`\n🔍 Starting HTTP checks on ${allImages.length} images...`);
 
   const queue = new PQueue({ concurrency: 50 });
   const results: ImageResult[] = [];
-
   let processed = 0;
-  for (const img of toCheck) {
+
+  for (const img of allImages) {
     queue.add(async () => {
       const checked = await checkImageStatus(img);
       results.push(checked);
       processed++;
-      if (processed % 200 === 0 || processed === toCheck.length) {
-        console.log(`  ⏳ Checked ${processed}/${toCheck.length} AWS images...`);
+      if (processed % 100 === 0 || processed === allImages.length) {
+        console.log(`    ✅ ${processed}/${allImages.length} images checked`);
       }
     });
   }
@@ -151,24 +187,35 @@ export async function sitemapAuditCommand() {
   await queue.onIdle();
 
   const broken = results.filter(img => img.status === 404);
+  const awsImages = results.filter(img => img.isAws);
+  const externalImages = results.filter(img => !img.isAws);
 
-  // Écriture uniquement des logs détaillés
-  const lines: string[] = [];
-
-  if (broken.length > 0 || notAws.length > 0) {
-    console.log('\n❌ Problematic images:');
-    for (const img of [...broken, ...notAws]) {
+  if (broken.length > 0) {
+    console.log('\n❌ Broken or missing images:');
+    for (const img of broken) {
       const msg = `• ${img.imageUrl} (from ${img.pageUrl}) → Status: ${img.status} | AWS: ${img.isAws ? '✅' : '❌'}`;
       console.log(msg);
-      lines.push(msg);
+      appendLog(msg);
     }
-
-    fs.writeFileSync(logFilePath, lines.join('\n') + '\n');
-  } else {
-    const msg = '✅ All images valid and correctly hosted on AWS.';
-    console.log(msg);
-    fs.writeFileSync(logFilePath, msg + '\n');
   }
+
+  console.log('\n📦 Audit complete. Generating report...\n');
+
+  const summary = [
+    '',
+    '📋 ======= SUMMARY =======',
+    `Total pages scanned     : ${pages.length}`,
+    `Pages failed to load    : ${failedPages.length}`,
+    `Total images found      : ${results.length}`,
+    `Images on AWS           : ${awsImages.length}`,
+    `Images not on AWS       : ${externalImages.length}`,
+    `Broken images (404)     : ${broken.length}`,
+    '==========================',
+    '',
+  ];
+
+  summary.forEach(line => appendLog(line));
+  summary.forEach(line => console.log(line));
 
   console.timeEnd('⏱️ Execution time');
 }
