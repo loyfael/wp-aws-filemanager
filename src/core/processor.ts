@@ -1,3 +1,4 @@
+import { WP_TABLE_PREFIX } from '../utils/variable';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -23,8 +24,8 @@ export async function processImages(batchSize: number, options: ProcessImageOpti
     const offset = options.batchOffset ?? 0;
     const query = `
       SELECT p.ID, m.meta_value
-      FROM M3hSHDUe_posts p
-      JOIN M3hSHDUe_postmeta m ON p.ID = m.post_id
+      FROM ${WP_TABLE_PREFIX}_posts p
+      JOIN ${WP_TABLE_PREFIX}_postmeta m ON p.ID = m.post_id
       WHERE p.post_type = 'attachment' AND m.meta_key = '_wp_attachment_metadata'
       ORDER BY p.ID
       LIMIT 999999
@@ -54,9 +55,12 @@ export async function processImages(batchSize: number, options: ProcessImageOpti
       }
     }
 
-    if (buffer.length > 0) {
+    if (buffer.length > 0 && !options.dryRun) {
       totalBatches++;
       console.log(`📦 Processing final batch #${totalBatches} (${buffer.length} items)`);
+      await processBuffer(buffer, options);
+    } else if (options.dryRun && buffer.length > 0) {
+      console.log(`📦 Processing dry-run preview batch (${buffer.length} items)`);
       await processBuffer(buffer, options);
     }
 

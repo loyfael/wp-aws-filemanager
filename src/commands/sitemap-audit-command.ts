@@ -71,7 +71,8 @@ async function fetchSitemapUrls(): Promise<string[]> {
 async function extractAllImageUrls(url: string): Promise<ImageResult[]> {
   try {
     console.log(`🌐 Fetching page ${url}`);
-    const res = await axios.get(url, { timeout: 10000 });
+    const res = await axios.get(url, { timeout: 30000 }); // 30 seconds timeout
+    
     const $ = load(res.data);
     const images: Set<string> = new Set();
 
@@ -126,7 +127,7 @@ async function extractAllImageUrls(url: string): Promise<ImageResult[]> {
 async function checkImageStatus(img: ImageResult): Promise<ImageResult> {
   try {
     const res = await axios.head(img.imageUrl, {
-      timeout: 5000,
+      timeout: 20000,
       maxRedirects: 0,
       validateStatus: () => true,
     });

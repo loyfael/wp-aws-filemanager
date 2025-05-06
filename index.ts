@@ -7,6 +7,7 @@ import { listS3Command } from './src/commands/list-s3'
 import { auditImagesCommand } from './src/commands/audit-images'
 import { sitemapAuditCommand } from './src/commands/sitemap-audit-command'
 import { cleanupOrphansCommand } from './src/commands/cleanup-orphans'
+import { migrateDryRunCommand } from './src/commands/dry-run-migrate'
 
 dotenv.config()
 
@@ -32,7 +33,8 @@ const commands = {
   'S3:list': listS3Command, // List all images in AWS S3
   "migrate-verify": auditImagesCommand, // Audit images to check if they are in sync, and suggest of deleting them
   'image-urls-audit': sitemapAuditCommand,
-  'cleanup-orphans': cleanupOrphansCommand
+  'cleanup-orphans': cleanupOrphansCommand,
+  'dry-run-migrate': migrateDryRunCommand, // Simulate a migration of images in batch without modifying or uploading anything
 }
 
 console.log('\n📦 WP to AWS S3 Migration Tool\n')

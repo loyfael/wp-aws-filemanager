@@ -43,43 +43,44 @@ export async function processBuffer(rows: any[], options: ProcessImageOptions) {
       const metadata = parseMetadata(rawMeta);
 
       if (!rawMeta || typeof rawMeta !== 'string' || rawMeta.length < 10) {
-        console.warn(`⚠️ Possibly corrupt or empty metadata for post ${postId}`);
-        log(`⚠️ Possibly corrupt or empty metadata for post ${postId}`);
-        continue;
-      }
-
-      if (!metadata) {
-        console.warn(`⚠️ Skipping post ${postId}: metadata parsing failed or invalid.`);
-        log(`⚠️ Skipping post ${postId}: metadata parsing failed or invalid.`);
+        const msg = `⚠️ Possibly corrupt or empty metadata for post ${postId}`;
+        console.warn(msg);
+        log(msg);
         continue;
       }
 
       if (!metadata || typeof metadata !== 'object') {
-        console.warn(`⚠️ Skipping post ${postId}: invalid metadata.`);
-        log(`⚠️ Skipping post ${postId}: invalid metadata.`);
+        const msg = `⚠️ Skipping post ${postId}: metadata parsing failed or invalid.`;
+        console.warn(msg);
+        log(msg);
         continue;
       }
 
       const hasS3Meta = metadata.s3?.url && metadata.s3?.key && metadata.s3?.bucket;
 
-      if (hasS3Meta) {
+      if (hasS3Meta && !options.dryRun) {
         const exists = await isImageOnS3(metadata.s3.key);
         if (exists) {
-          console.log(`⏩ Skipping post ${postId}, already migrated and exists on S3.`);
-          log(`⏩ Skipping post ${postId}, already migrated and exists on S3.`);
+          const msg = `⏩ Skipping post ${postId}, already migrated and exists on S3.`;
+          console.log(msg);
+          log(msg);
           continue;
         } else {
-          console.warn(`🔁 [REMIGRATED] Post ${postId} had S3 key but file is missing on AWS. Reprocessing...`);
-          log(`🔁 [REMIGRATED] Post ${postId} had S3 key but file is missing on AWS. Reprocessing...`);
+          const msg = `🔁 [REMIGRATED] Post ${postId} had S3 key but file is missing on AWS. Reprocessing...`;
+          console.warn(msg);
+          log(msg);
         }
       }
 
       try {
         await processMainImage(postId, metadata, rawMeta, options);
-        console.log(`✅ Migrated post ${postId}`);
+        const msg = `✅ Migrated post ${postId}`;
+        console.log(msg);
+        log(msg);
       } catch (err) {
-        console.error(`❌ Failed to migrate post ${postId}: ${(err as Error).message}`);
-        log(`❌ Failed to migrate post ${postId}: ${(err as Error).message}`);
+        const msg = `❌ Failed to migrate post ${postId}: ${(err as Error).message}`;
+        console.error(msg);
+        log(msg);
       }
     }
   } catch (err) {

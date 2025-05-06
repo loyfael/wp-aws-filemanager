@@ -24,59 +24,48 @@ function log(message: string) {
 export async function processSizes(postId: number, metadata: any, basePath: string, options: ProcessImageOptions) {
     try {
         if (!metadata.sizes || typeof metadata.sizes !== 'object') return;
-
+    
         for (const sizeName in metadata.sizes) {
-            const size = metadata.sizes[sizeName];
-
-            if (
-                !size ||
-                typeof size !== 'object' ||
-                typeof size.file !== 'string' ||
-                !size.file.trim()
-            ) {
-                console.log(`⚠️ Skipping size '${sizeName}' for post ${postId}: invalid or missing 'file' field.`);
-                continue;
+          const size = metadata.sizes[sizeName];
+    
+          if (!size || typeof size !== 'object' || typeof size.file !== 'string' || !size.file.trim()) {
+            log(`⚠️ Skipping size '${sizeName}' for post ${postId}: invalid or missing 'file' field.`);
+            continue;
+          }
+    
+          if (size.s3?.url && size.s3?.key && size.s3?.bucket) {
+            log(`⏩ Skipping size '${sizeName}' for post ${postId} (already migrated).`);
+            continue;
+          }
+    
+          try {
+            const sizeKey = `${basePath}/${size.file}`;
+    
+            if (options.dryRun) {
+              log(`(Dry-run) Would upload size '${sizeName}' for post ${postId}: ${sizeKey}`);
+              continue;
             }
-
-            if (size.s3?.url && size.s3?.key && size.s3?.bucket) {
-                console.log(`⏩ Skipping size '${sizeName}' for post ${postId} (already migrated).`);
-                continue;
-            }
-
-            try {
-                const sizeKey = `${basePath}/${size.file}`;
-                const sizeTmp = await downloadImage(sizeKey);
-
-                log(`📤 Uploading size '${sizeName}' for post ${postId}: ${sizeKey}`);
-
-                const sizeResult = options.dryRun
-                    ? {
-                        url: `DRY_RUN_S3_URL/${sizeKey}`,
-                        key: sizeKey,
-                        bucket: process.env.AWS_BUCKET_NAME!,
-                        size: 0,
-                        contentType: getMimeType(sizeKey) || 'application/octet-stream',
-                    }
-                    : await uploadToS3(sizeTmp, sizeKey);
-
-                size.s3 = {
-                    url: sizeResult.url,
-                    bucket: sizeResult.bucket,
-                    key: sizeResult.key,
-                    provider: 's3',
-                    'mime-type': sizeResult.contentType,
-                    privacy: 'public-read',
-                };
-
-                if (!options.dryRun) {
-                    await fs.unlink(sizeTmp);
-                }
-
-            } catch (err) {
-                console.log(`⚠️ Skipping size '${sizeName}' for post ${postId}: ${(err as Error).message}`);
-            }
+    
+            const sizeTmp = await downloadImage(sizeKey);
+            log(`📤 Uploading size '${sizeName}' for post ${postId}: ${sizeKey}`);
+    
+            const sizeResult = await uploadToS3(sizeTmp, sizeKey);
+    
+            size.s3 = {
+              url: sizeResult.url,
+              bucket: sizeResult.bucket,
+              key: sizeResult.key,
+              provider: 's3',
+              'mime-type': sizeResult.contentType,
+              privacy: 'public-read',
+            };
+    
+            await fs.unlink(sizeTmp);
+          } catch (err) {
+            log(`⚠️ Skipping size '${sizeName}' for post ${postId}: ${(err as Error).message}`);
+          }
         }
-    } catch (err) {
+      } catch (err) {
         log(`❌ Failed to process sizes for post ${postId}: ${(err as Error).message}`);
-    }
+      }
 }

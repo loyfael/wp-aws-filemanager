@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { streamPool } from '../database/mysql-stream';
 import { unserialize } from 'php-serialize';
 import { table } from 'table';
+import { WP_TABLE_PREFIX } from '../utils/variable';
 
 dotenv.config();
 
@@ -46,8 +47,8 @@ export async function listCommand(): Promise<void> {
 
   const query = `
     SELECT p.ID, p.post_title, pm.meta_value
-    FROM M3hSHDUe_posts p
-    JOIN M3hSHDUe_postmeta pm ON p.ID = pm.post_id
+    FROM ${WP_TABLE_PREFIX}_posts p
+    JOIN ${WP_TABLE_PREFIX}_postmeta pm ON p.ID = pm.post_id
     WHERE p.post_type = 'attachment'
       AND pm.meta_key = '_wp_attachment_metadata'
   `;

@@ -9,6 +9,7 @@ import { streamPool } from "../database/mysql-stream";
 import { ProcessImageOptions } from "./processor";
 import { lookup as getMimeType } from 'mime-types';
 import fsSync from 'fs';
+import { WP_TABLE_PREFIX } from '../utils/variable';
 
 const logPath = path.resolve('migration-report.txt');
 function log(message: string) {
@@ -89,7 +90,7 @@ export async function processMainImage(postId: number, metadata: any, rawMeta: s
   if (!options.dryRun) {
     backupMetadata(postId, rawMeta);
     await streamPool.promise().query(
-      `UPDATE M3hSHDUe_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_wp_attachment_metadata'`,
+      `UPDATE ${WP_TABLE_PREFIX}_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_wp_attachment_metadata'`,
       [newMeta, postId]
     );
     console.log(`✅ Migrated post ${postId} (main + sizes)`);

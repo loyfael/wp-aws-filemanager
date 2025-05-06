@@ -8,6 +8,7 @@ import path from 'path';
 import { S3Client, HeadObjectCommand } from '@aws-sdk/client-s3';
 import readline from 'readline';
 import { appendToLog } from '../utils/logger';
+import { WP_TABLE_PREFIX } from '../utils/variable';
 
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
@@ -84,8 +85,8 @@ export async function auditImagesCommand() {
 
   const query = `
     SELECT p.ID, m.meta_value
-    FROM M3hSHDUe_posts p
-    JOIN M3hSHDUe_postmeta m ON p.ID = m.post_id
+    FROM ${WP_TABLE_PREFIX}_posts p
+    JOIN ${WP_TABLE_PREFIX}_postmeta m ON p.ID = m.post_id
     WHERE p.post_type = 'attachment' AND m.meta_key = '_wp_attachment_metadata'
     ORDER BY p.ID
   `;
