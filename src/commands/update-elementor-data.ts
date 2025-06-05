@@ -33,7 +33,7 @@ export async function updateElementorDataCommand() {
 
     // Fetch all Elementor data from the database
     const [rows]: any[] = await pool.query(
-        `SELECT post_id, meta_value FROM ${WP_TABLE_PREFIX}_postmeta WHERE meta_key = '_elementor_data'`
+        `SELECT post_id, meta_value FROM ${WP_TABLE_PREFIX}postmeta WHERE meta_key = '_elementor_data'`
     )
 
     // Iterate over each row
@@ -71,7 +71,7 @@ export async function updateElementorDataCommand() {
         // Apply the update if --apply is set
         if (apply) {
             await pool.query(
-                `UPDATE ${WP_TABLE_PREFIX}_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_elementor_data'`,
+                `UPDATE ${WP_TABLE_PREFIX}postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_elementor_data'`,
                 [updatedMeta, postId]
             )
             console.log(`✅ Updated _elementor_data for post ${postId}`)

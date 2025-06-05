@@ -47,8 +47,8 @@ export async function listCommand(): Promise<void> {
 
   const query = `
     SELECT p.ID, p.post_title, pm.meta_value
-    FROM ${WP_TABLE_PREFIX}_posts p
-    JOIN ${WP_TABLE_PREFIX}_postmeta pm ON p.ID = pm.post_id
+    FROM ${WP_TABLE_PREFIX}posts p
+    JOIN ${WP_TABLE_PREFIX}postmeta pm ON p.ID = pm.post_id
     WHERE p.post_type = 'attachment'
       AND pm.meta_key = '_wp_attachment_metadata'
   `;

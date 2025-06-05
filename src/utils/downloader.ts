@@ -21,29 +21,35 @@ export async function downloadImage(imagePath: string): Promise<string> {
 
   if (!uploadsBase) {
     log(`❌ WP_UPLOADS_ABSOLUTE_PATH is not defined in .env`);
-    throw new Error('❌ WP_UPLOADS_ABSOLUTE_PATH is not defined in .env');
+    throw new Error('WP_UPLOADS_ABSOLUTE_PATH is not defined in .env');
   }
 
-  if (!imagePath || typeof imagePath !== 'string') {
-    log(`❌ Invalid image path: ${imagePath}`);
-    throw new Error(`❌ Invalid image path: ${imagePath}`);
+  if (!imagePath || typeof imagePath !== 'string' || imagePath.trim() === '') {
+    log(`❌ Invalid image path received: ${JSON.stringify(imagePath)}`);
+    throw new Error(`Invalid image path: ${imagePath}`);
   }
 
-  const originalFilePath = path.join(uploadsBase, imagePath);
-  const tempFilePath = path.join('/tmp', path.basename(imagePath));
+  const originalFilePath = path.resolve(uploadsBase, imagePath);
+  const tempFilePath = path.resolve('/tmp', path.basename(imagePath));
 
   try {
-    // Check if the source file exists
-    await fs.access(originalFilePath);
+    // Log the resolved path
+    log(`🔍 Checking file: ${originalFilePath}`);
 
-    // Copy it to a temp file
+    // Check existence first
+    if (!fsSync.existsSync(originalFilePath)) {
+      log(`❌ File does not exist: ${originalFilePath}`);
+      throw new Error(`File does not exist: ${originalFilePath}`);
+    }
+
+    // Copy the file
     await fs.copyFile(originalFilePath, tempFilePath);
 
-    console.log(`📥 Copied local image: ${imagePath} → ${tempFilePath}`);
+    log(`📥 Copied local image: ${imagePath} → ${tempFilePath}`);
     return tempFilePath;
   } catch (err) {
     log(`❌ Failed to access or copy local image: ${originalFilePath}`);
-    console.error(`❌ Failed to access or copy local image: ${originalFilePath}`);
+    log(`   Reason: ${(err as Error).message}`);
     throw err;
   }
 }

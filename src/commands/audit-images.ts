@@ -85,8 +85,8 @@ export async function auditImagesCommand() {
 
   const query = `
     SELECT p.ID, m.meta_value
-    FROM ${WP_TABLE_PREFIX}_posts p
-    JOIN ${WP_TABLE_PREFIX}_postmeta m ON p.ID = m.post_id
+    FROM ${WP_TABLE_PREFIX}posts p
+    JOIN ${WP_TABLE_PREFIX}postmeta m ON p.ID = m.post_id
     WHERE p.post_type = 'attachment' AND m.meta_key = '_wp_attachment_metadata'
     ORDER BY p.ID
   `;
